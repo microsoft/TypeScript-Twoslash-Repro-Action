@@ -1,4 +1,18 @@
-## Code in Master
+## Twoslash Verify GitHub Action
+
+Runs as a part of a nightly task in GitHub's CI. This action will:
+
+- Looks through all issues which have a specific label (default: `"Valid Repro"`)
+- Uses extracts code samples in the issue from markdown in the body and comments (codeblocks with `repro`)
+- Loops through the code samples with 
+- Leave / Updates a comment on the state of all the different results from the twoslash sample
+
+## Codebase
+
+All of the code lives in `src`, and the filenames are decided so that they represent the passage of data through the pipeline. 
+So if its at the top alphabetically, then it's at the top of the process.
+
+## To Work On This
 
 Install the dependencies  
 ```bash
@@ -12,14 +26,11 @@ $ yarn build && yarn pack
 
 Run the tests :heavy_check_mark:  
 ```bash
-$ npm test
+$ yarn test
 
- PASS  ./index.test.js
-  ✓ throws invalid number (3ms)
-  ✓ wait 500 ms (504ms)
-  ✓ test runs (95ms)
-
-...
+ PASS  src/__tests__/issuesToTwoslashRuns.test.ts
+  ✓ NOOPs with no issues (5ms)
+  ...
 ```
 
 ## Change action.yml

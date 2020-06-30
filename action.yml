@@ -1,10 +1,19 @@
-name: 'Your name here'
+name: 'Create reproductions in an issue'
 description: 'Provide a description here'
 author: 'Your name or organization here'
 inputs:
-  myInput:              # change this
-    description: 'input description here'
-    default: 'default value if applicable'
+  github-token:
+    description: 'API token for GitHub requests'
+    required: true
+  label:
+    description: 'What label should be on an issue to indicate it has a repro?'
+    default: 'has-repro'
+  repo:
+    description: 'What repo should this action look at, if not set it uses the same repo'
+  code-tag:
+    description: 'What tag should be applied to the markdown code block?'
+    default: 'has-repro'
+    
 runs:
   using: 'node12'
   main: 'dist/index.js'

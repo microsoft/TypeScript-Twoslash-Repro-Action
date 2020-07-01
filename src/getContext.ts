@@ -6,6 +6,7 @@ export const getContext = () => {
   const token = getInput('github-token')
   const repo = getInput('repo') || process.env.GITHUB_REPOSITORY!
   const label = getInput('label')
+  const tag = getInput("code-tag")
   const owner = repo.split('/')[0]
   const name = repo.split('/')[1]
 
@@ -13,7 +14,8 @@ export const getContext = () => {
     token,
     owner,
     name,
-    label
+    label,
+    tag
   }
 
   return ctx

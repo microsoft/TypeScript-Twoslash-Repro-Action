@@ -2,7 +2,6 @@ import { getIssues } from './getIssues'
 import { getContext } from './getContext'
 import { issueToTwoslashRun } from './issuesToTwoslashRuns'
 import { updateIssue } from './updatesIssue'
-import { stdout } from 'process'
 
 
 async function run() {
@@ -11,7 +10,6 @@ async function run() {
 
   const issues = await getIssues(ctx)
   console.log(`Found: ${issues.length} issues with the tag`);
-
 
   for (const issue of issues) {
     process.stdout.write(".")

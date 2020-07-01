@@ -19,13 +19,13 @@ export type TwoslashRun = {
 export const issueToTwoslashRun = (ctx: Context) => (issue: Issue): TwoslashRun => {
   // Body -> CodeBlocks
   const bodyCode = markdownToCodeBlocks(issue.body)
-  const codeBlocks: TwoslashRun["codeBlocksToRun"] = bodyCode.filter(validCodeblocks(ctx.label)).map(c => ({
+  const codeBlocks: TwoslashRun["codeBlocksToRun"] = bodyCode.filter(validCodeblocks(ctx.tag)).map(c => ({
     block: c
   }))
 
   // Comment -> CodeBlocks[]
   const commentCodeBlocks = issue.comments.nodes.map(c => ({
-    twoslashRuns: markdownToCodeBlocks(c.body).filter(validCodeblocks(ctx.label)),
+    twoslashRuns: markdownToCodeBlocks(c.body).filter(validCodeblocks(ctx.tag)),
     commentID: c.id
   }))
 
@@ -47,4 +47,4 @@ export const issueToTwoslashRun = (ctx: Context) => (issue: Issue): TwoslashRun 
 }
 
 
-const validCodeblocks = (label: string) => (codeBlock: CodeBlock) => codeBlock.tags.includes(label)
+const validCodeblocks = (tag: string) => (codeBlock: CodeBlock) => codeBlock.tags.includes(tag)

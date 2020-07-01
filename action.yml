@@ -16,7 +16,7 @@ inputs:
   code-tag:
     description: 'What tag should be applied to the markdown code block?'
     default: 'repro'
-    
+
 runs:
   using: 'node12'
   main: 'dist/index.js'

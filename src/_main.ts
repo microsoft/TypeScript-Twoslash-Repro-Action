@@ -1,6 +1,7 @@
 import { getIssues } from './getIssues'
 import { getContext } from './getContext'
-import { issuesToTwoslashRuns, issueToTwoslashRun } from './issuesToTwoslashRuns'
+import { issueToTwoslashRun } from './issuesToTwoslashRuns'
+import { updateIssue } from './updatesIssue'
 
 
 async function run() {
@@ -8,7 +9,7 @@ async function run() {
   const issues = await getIssues(ctx)
   for (const issue of issues) {
     const runs = issueToTwoslashRun(ctx)(issue)
-    await updateIss
+    await updateIssue(ctx, issue, runs)
   }
   
   

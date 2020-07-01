@@ -20,7 +20,8 @@ export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResult
   let latestRuns = runs.codeBlocksToRun.map(runTwoSlash("Nightly"))
 
   if (!oldResults) {
-    const olderRuns = runs.codeBlocksToRun.map(runTwoSlashOnOlderVersions).flat()
+    // TODO: Fix d.ts for flat
+    const olderRuns = (runs.codeBlocksToRun.map(runTwoSlashOnOlderVersions) as any).flat() 
     return [...olderRuns, ...latestRuns]
   } else {
     const withoutLatest = oldResults.filter(f => f.label !== "Nightly")

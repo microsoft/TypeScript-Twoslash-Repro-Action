@@ -13,6 +13,7 @@ jobs:
     - uses: actions/checkout@v1
     - run: yarn init -y
     - run: yarn add typescript@next
+    - run: yarn build
     - run: yarn deploy
     - uses: ./
       with: 

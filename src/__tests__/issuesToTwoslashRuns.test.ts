@@ -25,7 +25,8 @@ console.log("2")
 \`\`\`js
 console.log("Hello")
 \`\`\`
-  `
+`
+
 
 const issueWithBody: Issue = {
   number: 123,

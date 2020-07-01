@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
+    - run: yarn init -y
+    - run: yarn add typescript@next
+    - run: yarn deploy
     - uses: ./
       with: 
-        github-token: {{ secrets.GITHUB_TOKEN }}
+        github-token: {{ secrets.TS_BOT_GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-import {getInput, info} from '@actions/core'
+import {getInput} from '@actions/core'
 
 export type Context = ReturnType<typeof getContext>
 

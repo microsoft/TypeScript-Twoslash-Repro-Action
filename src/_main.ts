@@ -15,10 +15,9 @@ async function run() {
     process.stdout.write(".")
     if (issues.indexOf(issue) % 10) console.log("")
 
-    console.log(JSON.stringify(issue, null, "  "))
-
     const runs = issueToTwoslashRun(ctx)(issue)
-    console.log(runs)
+    console.log(JSON.stringify(runs, null, "  "))
+    
     await updateIssue(ctx, issue, runs)
   }
 }

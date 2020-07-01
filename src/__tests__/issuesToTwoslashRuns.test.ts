@@ -6,25 +6,26 @@ const testCtx: Context = {
   label: 'repro',
   name: 'myRepo',
   owner: 'orta',
-  token: '123456'
+  token: '123456',
+  tag: "repro"
 }
 
 const oneCodeBlock = ` comment blah
-\`\`\`ts repro
-console.log("Hello")
-\`\`\`
+\`\`\`ts repro\r
+console.log("Hello")\r
+\`\`\`\r
 `
 
 const threeCodeBlocks = ` comment blah
-\`\`\`ts repro
-console.log("Hello")
-\`\`\`
-\`\`\`ts repro
-console.log("2")
-\`\`\`
-\`\`\`js
-console.log("Hello")
-\`\`\`
+\`\`\`ts repro\r
+console.log("Hello")\r
+\`\`\`\r
+\`\`\`ts repro\r
+console.log("2")\r
+\`\`\`\r
+\`\`\`js\r
+console.log("Hello")\r
+\`\`\`\r
 `
 
 

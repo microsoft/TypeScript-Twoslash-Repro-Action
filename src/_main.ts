@@ -16,8 +16,9 @@ async function run() {
   for (const issue of issues) {
     process.stdout.write(".")
     if (issues.indexOf(issue) % 10) console.log("")
-    
+
     const runs = issueToTwoslashRun(ctx)(issue)
+    console.log(runs)
     await updateIssue(ctx, issue, runs)
   }
 }

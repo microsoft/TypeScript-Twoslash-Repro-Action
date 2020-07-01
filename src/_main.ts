@@ -2,6 +2,7 @@ import { getIssues } from './getIssues'
 import { getContext } from './getContext'
 import { issueToTwoslashRun } from './issuesToTwoslashRuns'
 import { updateIssue } from './updatesIssue'
+import { runTwoslashRuns } from './runTwoslashRuns'
 
 
 async function run() {
@@ -16,9 +17,11 @@ async function run() {
     if (issues.indexOf(issue) % 10) console.log("")
 
     const runs = issueToTwoslashRun(ctx)(issue)
-    console.log(JSON.stringify(runs, null, "  "))
     
-    await updateIssue(ctx, issue, runs)
+    const results = runTwoslashRuns(issue, runs)
+    console.log(JSON.stringify(results, null, "  "))
+    
+    await updateIssue(ctx, issue, results)
   }
 }
 

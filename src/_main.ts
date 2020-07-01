@@ -11,8 +11,6 @@ async function run() {
     const runs = issueToTwoslashRun(ctx)(issue)
     await updateIssue(ctx, issue, runs)
   }
-  
-  
 }
 
 run()

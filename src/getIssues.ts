@@ -39,13 +39,12 @@ const issuesQuery = (owner: string, name: string, label: string) => {
       issues(labels:[$label], states:OPEN, first:100) {
         nodes {
           number
-            body
+          body
 
-            comments(first: 100) {
-              nodes {
-                body
-                id
-              }
+          comments(first: 100) {
+            nodes {
+              body
+              id
             }
           }
         }

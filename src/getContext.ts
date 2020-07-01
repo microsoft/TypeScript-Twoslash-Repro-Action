@@ -1,4 +1,4 @@
-import {getInput} from '@actions/core'
+import {getInput, info} from '@actions/core'
 
 export type Context = ReturnType<typeof getContext>
 
@@ -9,10 +9,13 @@ export const getContext = () => {
   const owner = repo.split('/')[0]
   const name = repo.split('/')[1]
 
-  return {
+  const ctx = {
     token,
     owner,
     name,
     label
   }
+
+  info(`Context: ${JSON.stringify(ctx, null, '  ')}`);
+  return ctx
 }

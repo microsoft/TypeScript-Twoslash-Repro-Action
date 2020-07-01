@@ -1,5 +1,6 @@
 import { getOctokit } from '@actions/github'
 import { Context } from './getContext'
+import { info } from '@actions/core'
 
 export type Issue = {
   number: number
@@ -28,6 +29,7 @@ export async function getIssues(context: Context): Promise<Issue[]> {
   })) as any
   // TODO: check if nodes length == 100, then start looping
 
+  info(`Found ${initialIssues.repository.issues.nodes} issues`)
   return initialIssues.repository.issues.nodes
 }
 

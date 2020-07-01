@@ -5,14 +5,17 @@ inputs:
   github-token:
     description: 'API token for GitHub requests'
     required: true
+
   label:
     description: 'What label should be on an issue to indicate it has a repro?'
     default: 'has-repro'
+
   repo:
     description: 'What repo should this action look at, if not set it uses the same repo'
+
   code-tag:
     description: 'What tag should be applied to the markdown code block?'
-    default: 'has-repro'
+    default: 'repro'
     
 runs:
   using: 'node12'

@@ -16,6 +16,5 @@ export const getContext = () => {
     label
   }
 
-  info(`Context: ${JSON.stringify(ctx, null, '  ')}`);
   return ctx
 }

@@ -22,6 +22,24 @@ export const updateIssue = async (ctx: Context, issue: Issue, newRuns: TwoslashR
 }
 
 const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>) => {
+
+  const simpleSummary = (run: TwoslashResults) => {
+    const msg: string[] = []
+    if (run.state === RunState.Green) msg.push(":+1: Compiled")
+    if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: \n - ${run.assertions.join("\n - ")}`)
+    if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
+    if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: ${run.exception}`)
+    return "<p>" + msg.join("<br/>") + "</p>"
+  }
+
+  const toRow = (label: string, summary: string) => `
+  <tr>
+  <td>${label}</td>
+  <td>
+    <p>${summary}</p>
+  </td>
+  </tr>`
+
   const sources = Object.keys(runsBySource).sort()
   const inner = sources.map(source => {
       const runs = runsBySource[source]
@@ -37,22 +55,7 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
         }
       });
 
-      const toRow = (label: string, summary: string) => `
-<tr>
-<td>${label}</td>
-<td>
-  <p>${summary}</p>
-</td>
-</tr>`
-
-      const simpleSummary = (run: TwoslashResults) => {
-        const msg: string[] = []
-        if (run.state === RunState.Green) msg.push(":+1: Compiled")
-        if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: \n - ${run.assertions.join("\n - ")}`)
-        if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
-        if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: ${run.exception}`)
-        return "<p>" + msg.join("<br/>") + "</p>"
-      }
+  
     
       return `
 <h4>${runs[0].description}</h4>

@@ -26,18 +26,29 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
   const inner = sources.map(source => {
       const runs = runsBySource[source]
 
-      const toRow = (run: TwoslashResults) => `
+      const summerizedRows: { name: string, output: string }[] = []
+      runs.forEach(run => {
+        const summary = simpleSummary(run)
+        const existingSame = summerizedRows.find(r => r.output === summary)
+        if (!existingSame){
+          summerizedRows.push({ name: run.label, output: summary })
+        } else {
+          existingSame.name = `${existingSame.name}, ${run.label}`
+        }
+      });
+
+      const toRow = (label: string, summary: string) => `
 <tr>
-<td>${run.label}</td>
+<td>${label}</td>
 <td>
-  <p>${simpleSummary(run)}</p>
+  <p>${summary}</p>
 </td>
 </tr>`
-    
+
       const simpleSummary = (run: TwoslashResults) => {
         const msg: string[] = []
         if (run.state === RunState.Green) msg.push(":+1: Compiled")
-        if (run.state === RunState.HasAssertions) msg.push(":warning: Assertions")
+        if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: \n - ${run.assertions.join("\n - ")}`)
         if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
         if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: ${run.exception}`)
         return "<p>" + msg.join("<br/>") + "</p>"
@@ -54,7 +65,7 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
       </tr>
     </thead>
     <tbody>
-      ${runs.sort((l, r) => l.label.localeCompare(r.label)).map(toRow).join("\n")}
+      ${summerizedRows.sort((l, r) => r.name.localeCompare(l.name)).map(r => toRow(r.name, r.output)).join("\n")}
     </tbody>
   </table>
 </td>

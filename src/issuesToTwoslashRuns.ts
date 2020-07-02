@@ -18,7 +18,7 @@ export const issueToTwoslashRun = (ctx: Context) => (issue: Issue): TwoslashRun 
   const bodyCode = markdownToCodeBlocks(issue.body)
   const codeBlocks: TwoslashRun["codeBlocksToRun"] = bodyCode.filter(validCodeblocks(ctx.tag)).map((c, i) => ({
     block: c,
-    description: `<a href='#discussion_bucket'>Issue body</a> code block by @${issue.author.login}`
+    description: `<a href='#issue-${issue.id}'>Issue body</a> code block by @${issue.author.login}`
   }))
 
   // Comment -> CodeBlocks[]

@@ -10,7 +10,7 @@ export type EmbeddedTwoslashRun = {
 }
 
 export const updateIssue = async (ctx: Context, issue: Issue, newRuns: TwoslashResults[], api: API) => {
-  console.log("updating issue", issue.number)
+  console.log("updating issue", issue.number, issue.id)
 
   const previousRun = getPreviousRunInfo(issue)
 
@@ -24,7 +24,7 @@ export const updateIssue = async (ctx: Context, issue: Issue, newRuns: TwoslashR
 /** Makes the "Historcal" section at the end of an issue */
 const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>) => {
 
-  const listify = (arr: string[]) => arr.length ? `<ul><li>${arr.join("</li><li>")}</li></ul>` : "" 
+  const listify = (arr: string[]) => arr.length ? `<ul><li><code>${arr.join("</code></li><li><code>")}</code></li></ul>` : "" 
 
   const simpleSummary = (run: TwoslashResults) => {
     const msg: string[] = []
@@ -72,7 +72,7 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
     <thead>
       <tr>
         <th width="250">Version</th>
-        <th width="100%">Info</th>
+        <th width="80%">Info</th>
       </tr>
     </thead>
     <tbody>

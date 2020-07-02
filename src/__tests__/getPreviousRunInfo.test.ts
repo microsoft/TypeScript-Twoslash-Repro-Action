@@ -15,5 +15,5 @@ test('gets the value in and then out again', () => {
   } as any
 
   const result = getPreviousRunInfo(issue)
-  expect(result).toEqual({a: '123'})
+  expect(result).toEqual({commentID: undefined, runs: { a: '123' }})
 })

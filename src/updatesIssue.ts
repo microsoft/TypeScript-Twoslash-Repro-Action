@@ -14,47 +14,70 @@ export const updateIssue = async (ctx: Context, issue: Issue, newRuns: TwoslashR
 
   const previousRun = getPreviousRunInfo(issue)
 
-  const latestCurrentRuns = newRuns.filter(r => r.label === "Latest")
-  const olderRuns = newRuns.filter(r => r.label !== "Latest")
+  // const latestCurrentRuns = newRuns.filter(r => r.label === "Latest")
+  const groupedBySource = groupBy(newRuns, ts => ts.commentID || "body")
 
-  const msg = makeMessageForOlderRuns(olderRuns)
+  const msg = makeMessageForOlderRuns(groupedBySource)
   await api.editOrCreateComment(issue.id, previousRun?.commentID, msg)
 }
 
-const makeMessageForOlderRuns = (runs: TwoslashResults[]) => {
-  const toRow = (run: TwoslashResults) => `<tr>
-  <td>${run.label}</td>
-  <td>
-    <p>${simpleSummary(run)}</p>
-  </td>
-  </tr>`
+const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>) => {
+  const sources = Object.keys(runsBySource).sort()
+  const inner = sources.map(source => {
+      const runs = runsBySource[source]
 
-  const simpleSummary = (run: TwoslashResults) => {
-    const msg: string[] = []
-    if (run.state === RunState.Green) msg.push(":+1: Compiled")
-    if (run.state === RunState.HasAssertions) msg.push(":warning: Assertions")
-    if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
-    if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: ${run.exception}`)
-    return "<p>" + msg.join("<br/>") + "</p>"
-  }
+      const toRow = (run: TwoslashResults) => `<tr>
+      <td>${run.label}</td>
+      <td>
+        <p>${simpleSummary(run)}</p>
+      </td>
+      </tr>`
+    
+      const simpleSummary = (run: TwoslashResults) => {
+        const msg: string[] = []
+        if (run.state === RunState.Green) msg.push(":+1: Compiled")
+        if (run.state === RunState.HasAssertions) msg.push(":warning: Assertions")
+        if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
+        if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: ${run.exception}`)
+        return "<p>" + msg.join("<br/>") + "</p>"
+      }
+    
+      return `
+      <h4>${source}</h4>
+      <td>
+        <table role="table">
+          <thead>
+            <tr>
+              <th width="50">Version</th>
+              <th width="100%">Info</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${runs.sort((l, r) => l.label.localeCompare(r.label)).map(toRow).join("\n")}
+          </tbody>
+        </table>
+      </td>
+      `
+  });
 
-  return `
-  <details>
+
+  return `<details>
   <summary>Historical Information</summary>
-  <td>
-    <table role="table">
-      <thead>
-        <tr>
-          <th width="50">Version</th>
-          <th width="100%">Info</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${runs.map(toRow).join("\n")}
-      </tbody>
-    </table>
-  </td>
-  </details>`
+  ${inner}
+  </detail>
+  `
 }
 
-
+// https://gist.github.com/JamieMason/0566f8412af9fe6a1d470aa1e089a752#gistcomment-2999506
+function groupBy<T extends any, K extends keyof T>(array: T[], key: K | { (obj: T): string }): Record<string, T[]> {
+  const keyFn = key instanceof Function ? key : (obj: T) => obj[key]
+  return array.reduce(
+    (objectsByKeyValue, obj) => {
+      const value = keyFn(obj)
+      // @ts-ignore
+      objectsByKeyValue[value] = (objectsByKeyValue[value] || []).concat(obj)
+      return objectsByKeyValue
+    },
+    {} as Record<string, T[]>
+  )
+}

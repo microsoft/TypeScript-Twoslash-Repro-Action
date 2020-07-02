@@ -28,21 +28,31 @@ console.log("Hello")\r
 \`\`\`\r
 `
 
-
 const issueWithBody: Issue = {
   number: 123,
   body: oneCodeBlock,
   id: "",
+  author: {
+    login: "hey"
+  },
   comments: {nodes: []}
 }
 
 const issueWithBodyAndComments: Issue = {
   number: 123,
   id: "",
+  author: {
+    login: "hello"
+  },
   body: threeCodeBlocks,
   comments: {nodes: [{
     body: oneCodeBlock,
-    id: "1"
+    id: "1",
+
+    url: "https://thing.com",
+    author: {
+      login: "hey"
+    },
   }]}
 }
 

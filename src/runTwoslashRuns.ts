@@ -18,7 +18,7 @@ export type TwoslashResults = {
   emit?: string
   time: number
   exception?: string,
-  label: string
+  label: string // e.g. 3.9.5
   commentID?: string
   state: RunState
 }

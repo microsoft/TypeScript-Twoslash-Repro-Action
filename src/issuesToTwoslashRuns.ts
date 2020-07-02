@@ -7,6 +7,7 @@ export type TwoslashRun = {
 
   codeBlocksToRun: {
     // If missing, then it's in body
+    description: string
     commentID?: string
     block: CodeBlock
   }[]
@@ -19,14 +20,16 @@ export type TwoslashRun = {
 export const issueToTwoslashRun = (ctx: Context) => (issue: Issue): TwoslashRun => {
   // Body -> CodeBlocks
   const bodyCode = markdownToCodeBlocks(issue.body)
-  const codeBlocks: TwoslashRun["codeBlocksToRun"] = bodyCode.filter(validCodeblocks(ctx.tag)).map(c => ({
-    block: c
+  const codeBlocks: TwoslashRun["codeBlocksToRun"] = bodyCode.filter(validCodeblocks(ctx.tag)).map((c, i) => ({
+    block: c,
+    description: `Issue body code block ${i} by ${issue.author.login}`
   }))
 
   // Comment -> CodeBlocks[]
   const commentCodeBlocks = issue.comments.nodes.map(c => ({
     twoslashRuns: markdownToCodeBlocks(c.body).filter(validCodeblocks(ctx.tag)),
-    commentID: c.id
+    commentID: c.id,
+    description: `<a href='${c.url}'>Comment by ${issue.author.login}`
   }))
 
   // Flatten to Comment -> CodeBlock
@@ -35,7 +38,8 @@ export const issueToTwoslashRun = (ctx: Context) => (issue: Issue): TwoslashRun 
     comment.twoslashRuns.forEach(run => {
       codeBlocks.push({
         commentID: comment.commentID,
-        block: run
+        block: run,
+        description: comment.description
       })
     });
   });

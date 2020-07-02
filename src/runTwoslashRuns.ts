@@ -57,7 +57,7 @@ export const runTwoSlash = (label: string) => (
   const getTime = () => Math.round(new Date().getTime() - start.getTime())
 
   try {
-    result = twoslasher(run.block.content, run.block.lang, ts)
+    result = twoslasher(run.block.content, run.block.lang,  { noStaticSemanticInfo: true }, ts)
   } catch (error) {
     return {
       assertions: [],
@@ -88,7 +88,7 @@ export const runTwoSlash = (label: string) => (
     description: run.description
   }
 
-  const showEmit = run.block.content.includes('// @showEmit') || run.block.content.includes('// @showEmittedFile')
+  const showEmit = run.block.content.includes('// @showEmit') // this would also hit @showEmittedFiles only
   if (!showEmit) delete returnResults['emit']
 
   return returnResults

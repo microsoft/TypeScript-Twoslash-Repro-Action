@@ -103,7 +103,7 @@ const simpleSummary = (run: TwoslashResults) => {
   if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: ${listify(run.assertions)}`)
   if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
   if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: \n - ${listify(run.fails)}`)
-  if (run.emit) msg.push(`Emit: <pre><code>${run.emit}</code></pre>`)
+  if (run.emit) msg.push("Emit: \n\n```ts\n" + run.emit + "\n```\n\n")
   return '<p>' + msg.join('<br/>') + '</p>'
 }
 

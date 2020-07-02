@@ -19,8 +19,9 @@ export type TwoslashResults = {
   time: number
   exception?: string,
   label: string // e.g. 3.9.5
-  commentID?: string
+  description: string // e.g. Issue body by orta
   state: RunState
+  commentID?: string
 }
 
 export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResults[] {
@@ -63,7 +64,8 @@ export const runTwoSlash = (label: string) =>  (run: TwoslashRun["codeBlocksToRu
       time: getTime(),
       label,
       commentID: run.commentID,
-      state: RunState.RaisedException
+      state: RunState.RaisedException,
+      description: run.description
     }
   }
 
@@ -80,7 +82,8 @@ export const runTwoSlash = (label: string) =>  (run: TwoslashRun["codeBlocksToRu
     time: getTime(),
     label,
     commentID: run.commentID,
-    state
+    state,
+    description: run.description
   }
   
   const showEmit = run.block.content.includes("// @showEmit") || run.block.content.includes("// @showEmit")

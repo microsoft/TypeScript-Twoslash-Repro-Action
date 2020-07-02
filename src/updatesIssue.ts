@@ -26,12 +26,13 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
   const inner = sources.map(source => {
       const runs = runsBySource[source]
 
-      const toRow = (run: TwoslashResults) => `<tr>
-      <td>${run.label}</td>
-      <td>
-        <p>${simpleSummary(run)}</p>
-      </td>
-      </tr>`
+      const toRow = (run: TwoslashResults) => `
+<tr>
+<td>${run.label}</td>
+<td>
+  <p>${simpleSummary(run)}</p>
+</td>
+</tr>`
     
       const simpleSummary = (run: TwoslashResults) => {
         const msg: string[] = []
@@ -43,20 +44,20 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
       }
     
       return `
-      <h4>${source}</h4>
-      <td>
-        <table role="table">
-          <thead>
-            <tr>
-              <th width="50">Version</th>
-              <th width="100%">Info</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${runs.sort((l, r) => l.label.localeCompare(r.label)).map(toRow).join("\n")}
-          </tbody>
-        </table>
-      </td>
+<h4>${runs[0].description}</h4>
+<td>
+  <table role="table">
+    <thead>
+      <tr>
+        <th width="50">Version</th>
+        <th width="100%">Info</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${runs.sort((l, r) => l.label.localeCompare(r.label)).map(toRow).join("\n")}
+    </tbody>
+  </table>
+</td>
       `
   });
 

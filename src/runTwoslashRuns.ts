@@ -56,8 +56,9 @@ export const runTwoSlash = (label: string) => (
   const start = new Date()
   const getTime = () => Math.round(new Date().getTime() - start.getTime())
 
+  const tsModule = ts || require("typescript")
   try {
-    result = twoslasher(run.block.content, run.block.lang, {}, ts)
+    result = twoslasher(run.block.content, run.block.lang, {}, tsModule)
     // I have a fix for this in a PR:
     // result = twoslasher(run.block.content, run.block.lang, {noStaticSemanticInfo: true}, ts)
   } catch (error) {

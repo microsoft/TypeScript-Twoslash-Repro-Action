@@ -14,56 +14,45 @@ export const updateIssue = async (ctx: Context, issue: Issue, newRuns: TwoslashR
 
   const previousRun = getPreviousRunInfo(issue)
 
-  // const latestCurrentRuns = newRuns.filter(r => r.label === "Latest")
-  const groupedBySource = groupBy(newRuns, ts => ts.commentID || "__body")
+  const nightlyNew = getLatest(newRuns)
+  const previousNightly = getLatest(newRuns)
 
-  const msg = makeMessageForOlderRuns(groupedBySource)
+  const above = makeMessageForMainRuns(nightlyNew, previousNightly)
+
+  const groupedBySource = groupBy(newRuns, ts => ts.commentID || "__body")
+  const bottom = makeMessageForOlderRuns(groupedBySource)
+
+  const msg = `${above}\n\n${bottom}`
+
   await api.editOrCreateComment(issue.id, previousRun?.commentID, msg)
 }
 
-/** Makes the "Historcal" section at the end of an issue */
+/** Above the fold */
+const makeMessageForMainRuns = (newLatestRuns: TwoslashResults[], oldLatestRuns: TwoslashResults[]) => {
+  // If they're inconsistent, then treat it as though there are no latest runs
+  if (newLatestRuns.length !== oldLatestRuns.length) oldLatestRuns.splice(0, oldLatestRuns.length)
+
+  const groupedBySource = groupBy(newLatestRuns, ts => ts.commentID || "__body")
+  const sources = Object.keys(groupedBySource).sort().reverse()
+
+  const inner = sources.map(source => {
+    const runs = groupedBySource[source]
+    const summerizeRuns = summerizeRunsAsHTML(runs)
+
+    return summerizeRuns.sort((l, r) => r.name.localeCompare(l.name)).map(r => toRow(r.name, r.output)).join("\n")
+  })
+
+  return inner.join("\n\n")
+}
+
+/** Makes the "Historical" section at the end of an issue */
 const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>) => {
 
-  const listify = (arr: string[]) => arr.length ? `<ul><li><code>${arr.join("</code></li><li><code>")}</code></li></ul>` : "" 
-
-  const simpleSummary = (run: TwoslashResults) => {
-    const msg: string[] = []
-    if (run.state === RunState.Green) msg.push(":+1: Compiled")
-    if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: ${listify(run.assertions)}`)
-    if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
-    if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: \n - ${listify(run.fails)}`)
-    return "<p>" + msg.join("<br/>") + "</p>"
-  }
-
-  const toRow = (label: string, summary: string) => `
-  <tr>
-  <td>${label}</td>
-  <td>
-    <p>${summary}</p>
-  </td>
-  </tr>`
-
+  // Sources are the issue body, or comments etc
   const sources = Object.keys(runsBySource).sort().reverse()
   const inner = sources.map(source => {
       const runs = runsBySource[source]
-
-      /** 
-       * Looks through the results of the runs and creates consolidated results
-       * e.g [ { 3.6.2: "A B"}, { 3.7.1: "A B"},  { 3.8.1: "A B C"}]
-       *  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
-       */
-      const summerizedRows: { name: string, output: string }[] = []
-      runs.forEach(run => {
-        const summary = simpleSummary(run)
-        const existingSame = summerizedRows.find(r => r.output === summary)
-        if (!existingSame){
-          summerizedRows.push({ name: run.label, output: summary })
-        } else {
-          existingSame.name = `${existingSame.name}, ${run.label}`
-        }
-      });
-
-  
+      const summerizeRuns = summerizeRunsAsHTML(runs)
     
       return `
 <h4>${runs[0].description}</h4>
@@ -72,15 +61,15 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
     <thead>
       <tr>
         <th width="250">Version</th>
-        <th width="80%">Info</th>
+        <th width="80%">Reproduction Outputs</th>
       </tr>
     </thead>
     <tbody>
-      ${summerizedRows.sort((l, r) => r.name.localeCompare(l.name)).map(r => toRow(r.name, r.output)).join("\n")}
+      ${summerizeRuns.sort((l, r) => r.name.localeCompare(l.name)).map(r => toRow(r.name, r.output)).join("\n")}
     </tbody>
   </table>
 </td>
-      `
+`
   });
 
 
@@ -104,3 +93,46 @@ function groupBy<T extends any, K extends keyof T>(array: T[], key: K | { (obj: 
     {} as Record<string, T[]>
   )
 }
+
+const listify = (arr: string[]) => arr.length ? `<ul><li><code>${arr.join("</code></li><li><code>")}</code></li></ul>` : "" 
+
+
+const simpleSummary = (run: TwoslashResults) => {
+  const msg: string[] = []
+  if (run.state === RunState.Green) msg.push(":+1: Compiled")
+  if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: ${listify(run.assertions)}`)
+  if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
+  if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: \n - ${listify(run.fails)}`)
+  if (run.emit) msg.push(`Emit: <pre><code>${run.emit}</code></pre>`)
+  return "<p>" + msg.join("<br/>") + "</p>"
+}
+
+const toRow = (label: string, summary: string) => `
+<tr>
+<td>${label}</td>
+<td>
+  <p>${summary}</p>
+</td>
+</tr>`
+
+/** 
+* Looks through the results of the runs and creates consolidated results
+* e.g [ { 3.6.2: "A B"}, { 3.7.1: "A B"},  { 3.8.1: "A B C"}]
+*  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
+*/
+const summerizeRunsAsHTML = (runs: TwoslashResults[]) => {
+      const summerizedRows: { name: string, output: string }[] = []
+      runs.forEach(run => {
+        const summary = simpleSummary(run)
+        const existingSame = summerizedRows.find(r => r.output === summary)
+        if (!existingSame){
+          summerizedRows.push({ name: run.label, output: summary })
+        } else {
+          existingSame.name = `${existingSame.name}, ${run.label}`
+        }
+      });
+
+    return summerizedRows
+}
+
+const getLatest = (runs: TwoslashResults[]) =>  runs.filter(r => r.label === "Nightly")

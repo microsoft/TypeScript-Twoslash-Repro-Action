@@ -32,6 +32,7 @@ const issueWithBody: Issue = {
   number: 123,
   body: oneCodeBlock,
   id: "",
+  databaseId: 123,
   author: {
     login: "hey"
   },
@@ -41,6 +42,7 @@ const issueWithBody: Issue = {
 const issueWithBodyAndComments: Issue = {
   number: 123,
   id: "",
+  databaseId: 123,
   author: {
     login: "hello"
   },

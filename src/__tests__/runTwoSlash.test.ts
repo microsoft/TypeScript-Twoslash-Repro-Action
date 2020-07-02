@@ -26,6 +26,7 @@ maybeTest('handles a query test', () => {
 })
 
 const makeRun = (code: string):TwoslashRun['codeBlocksToRun'][number] => ({
+  description: "test run",
   block: {
     lang: 'ts',
     content: code,

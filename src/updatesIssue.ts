@@ -21,14 +21,17 @@ export const updateIssue = async (ctx: Context, issue: Issue, newRuns: TwoslashR
   await api.editOrCreateComment(issue.id, previousRun?.commentID, msg)
 }
 
+/** Makes the "Historcal" section at the end of an issue */
 const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>) => {
+
+  const listify = (arr: string[]) => arr.length ? `<ul><li>${arr.join("</li><li>")}</li></ul>` : "" 
 
   const simpleSummary = (run: TwoslashResults) => {
     const msg: string[] = []
     if (run.state === RunState.Green) msg.push(":+1: Compiled")
-    if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: \n - ${run.assertions.join("\n - ")}`)
+    if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: ${listify(run.assertions)}`)
     if (run.state === RunState.RaisedException) msg.push(`:bangbang: Exception: ${run.exception}`)
-    if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: ${run.exception}`)
+    if (run.state === RunState.CompileFailed) msg.push(`:x: Failed: \n - ${listify(run.fails)}`)
     return "<p>" + msg.join("<br/>") + "</p>"
   }
 
@@ -40,10 +43,15 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
   </td>
   </tr>`
 
-  const sources = Object.keys(runsBySource).sort()
+  const sources = Object.keys(runsBySource).sort().reverse()
   const inner = sources.map(source => {
       const runs = runsBySource[source]
 
+      /** 
+       * Looks through the results of the runs and creates consolidated results
+       * e.g [ { 3.6.2: "A B"}, { 3.7.1: "A B"},  { 3.8.1: "A B C"}]
+       *  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
+       */
       const summerizedRows: { name: string, output: string }[] = []
       runs.forEach(run => {
         const summary = simpleSummary(run)
@@ -63,7 +71,7 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
   <table role="table">
     <thead>
       <tr>
-        <th width="50">Version</th>
+        <th width="250">Version</th>
         <th width="100%">Info</th>
       </tr>
     </thead>

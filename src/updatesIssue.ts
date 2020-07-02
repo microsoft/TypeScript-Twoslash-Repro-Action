@@ -12,6 +12,8 @@ export type EmbeddedTwoslashRun = {
 
 export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: TwoslashResults[], api: API) => {
   console.log('updating issue', issue.number, issue.id)
+  if (newRuns.length === 0) return
+
   const previousRun = getPreviousRunInfo(issue)
 
   const nightlyNew = getLatest(newRuns)

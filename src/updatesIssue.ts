@@ -3,6 +3,7 @@ import { Context } from "./getContext";
 import { TwoslashResults, RunState } from "./runTwoslashRuns";
 import { getPreviousRunInfo } from "./utils/getPreviousRunInfo";
 import { API } from "./utils/api";
+import { runInContext } from "vm";
 
 export type EmbeddedTwoslashRun = {
   commentID: string
@@ -39,7 +40,8 @@ const makeMessageForMainRuns = (newLatestRuns: TwoslashResults[], oldLatestRuns:
     const runs = groupedBySource[source]
     const summerizeRuns = summerizeRunsAsHTML(runs)
 
-    return summerizeRuns.sort((l, r) => r.name.localeCompare(l.name)).map(r => toRow(r.name, r.output)).join("\n")
+    const sortedRuns = summerizeRuns.sort((l, r) => r.label.localeCompare(l.label))
+    return sortedRuns.map(r => toRow(r.description, r.output)).join("\n <br/>")
   })
 
   return inner.join("\n\n")
@@ -96,7 +98,6 @@ function groupBy<T extends any, K extends keyof T>(array: T[], key: K | { (obj: 
 
 const listify = (arr: string[]) => arr.length ? `<ul><li><code>${arr.join("</code></li><li><code>")}</code></li></ul>` : "" 
 
-
 const simpleSummary = (run: TwoslashResults) => {
   const msg: string[] = []
   if (run.state === RunState.Green) msg.push(":+1: Compiled")
@@ -121,14 +122,14 @@ const toRow = (label: string, summary: string) => `
 *  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
 */
 const summerizeRunsAsHTML = (runs: TwoslashResults[]) => {
-      const summerizedRows: { name: string, output: string }[] = []
+      const summerizedRows: { label: string, description: string, output: string }[] = []
       runs.forEach(run => {
         const summary = simpleSummary(run)
         const existingSame = summerizedRows.find(r => r.output === summary)
         if (!existingSame){
-          summerizedRows.push({ name: run.label, output: summary })
+          summerizedRows.push({ label: run.label, description: run.description, output: summary })
         } else {
-          existingSame.name = `${existingSame.name}, ${run.label}`
+          existingSame.label = `${existingSame.label}, ${run.label}`
         }
       });
 

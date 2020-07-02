@@ -15,7 +15,7 @@ export const updateIssue = async (ctx: Context, issue: Issue, newRuns: TwoslashR
   const previousRun = getPreviousRunInfo(issue)
 
   // const latestCurrentRuns = newRuns.filter(r => r.label === "Latest")
-  const groupedBySource = groupBy(newRuns, ts => ts.commentID || "body")
+  const groupedBySource = groupBy(newRuns, ts => ts.commentID || "__body")
 
   const msg = makeMessageForOlderRuns(groupedBySource)
   await api.editOrCreateComment(issue.id, previousRun?.commentID, msg)
@@ -64,7 +64,7 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
 
   return `<details>
   <summary>Historical Information</summary>
-  ${inner}
+${inner.join("\n\n")}
   </detail>
   `
 }

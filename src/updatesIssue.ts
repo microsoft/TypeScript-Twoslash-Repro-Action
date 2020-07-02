@@ -3,7 +3,7 @@ import {Context} from './getContext'
 import {TwoslashResults, RunState} from './runTwoslashRuns'
 import {getPreviousRunInfo} from './utils/getPreviousRunInfo'
 import {API} from './utils/api'
-import {runInContext} from 'vm'
+
 
 export type EmbeddedTwoslashRun = {
   commentID: string

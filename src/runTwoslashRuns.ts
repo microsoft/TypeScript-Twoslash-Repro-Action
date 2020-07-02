@@ -88,7 +88,7 @@ export const runTwoSlash = (label: string) => (
     description: run.description
   }
 
-  const showEmit = run.block.content.includes('// @showEmit') || run.block.content.includes('// @showEmit')
+  const showEmit = run.block.content.includes('// @showEmit') || run.block.content.includes('// @showEmittedFile')
   if (!showEmit) delete returnResults['emit']
 
   return returnResults

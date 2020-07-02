@@ -1,12 +1,11 @@
 import {Issue} from './getIssues'
 import {Context} from './getContext'
 import {TwoslashResults, RunState} from './runTwoslashRuns'
-import {getPreviousRunInfo} from './utils/getPreviousRunInfo'
+import {getPreviousRunInfo, runInfoString} from './utils/getPreviousRunInfo'
 import {API} from './utils/api'
 
-
 export type EmbeddedTwoslashRun = {
-  commentID: string
+  commentID: string | undefined
   runs: TwoslashResults[]
 }
 
@@ -24,7 +23,8 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
   const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body')
   const bottom = makeMessageForOlderRuns(groupedBySource)
 
-  const msg = `${above}\n\n${bottom}`
+  const embedded = runInfoString(newRuns)
+  const msg = `${above}\n\n${bottom}\n\n${embedded}`
   await api.editOrCreateComment(issue.id, previousRun?.commentID, msg)
 }
 

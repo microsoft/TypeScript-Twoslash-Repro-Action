@@ -32,11 +32,13 @@ console.log("Hello")\r
 const issueWithBody: Issue = {
   number: 123,
   body: oneCodeBlock,
+  id: "",
   comments: {nodes: []}
 }
 
 const issueWithBodyAndComments: Issue = {
   number: 123,
+  id: "",
   body: threeCodeBlocks,
   comments: {nodes: [{
     body: oneCodeBlock,

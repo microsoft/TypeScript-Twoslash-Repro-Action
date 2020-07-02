@@ -5,6 +5,13 @@ import { join } from "path";
 import { Issue } from "./getIssues";
 import { getPreviousRunInfo } from "./utils/getPreviousRunInfo";
 
+export const enum RunState {
+  RaisedException, // from fail to pass
+  CompileFailed,
+  HasAssertions,
+  Green
+}
+
 export type TwoslashResults = {
   assertions: string[]
   fails: string[]
@@ -13,6 +20,7 @@ export type TwoslashResults = {
   exception?: string,
   label: string
   commentID?: string
+  state: RunState
 }
 
 export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResults[] {
@@ -24,7 +32,7 @@ export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResult
     const olderRuns = (runs.codeBlocksToRun.map(runTwoSlashOnOlderVersions) as any).flat() 
     return [...olderRuns, ...latestRuns]
   } else {
-    const withoutLatest = oldResults.filter(f => f.label !== "Nightly")
+    const withoutLatest = oldResults.runs.filter(f => f.label !== "Nightly")
     return [...withoutLatest, ...latestRuns]
   }
 }
@@ -54,19 +62,25 @@ export const runTwoSlash = (label: string) =>  (run: TwoslashRun["codeBlocksToRu
       exception: error.name + " - " + error.message,
       time: getTime(),
       label,
-      commentID: run.commentID
+      commentID: run.commentID,
+      state: RunState.RaisedException
     }
   }
 
   const fails = result.errors.map(e => e.renderedMessage)
   
+  let state = RunState.Green
+  if (result.queries.length) state = RunState.HasAssertions
+  if (fails.length) state = RunState.CompileFailed
+
   const returnResults: TwoslashResults = {
     fails,
     assertions: result.queries.map(q => q.text || q.completions!.map(q => q.name).join(", ")),
     emit: result.code,
     time: getTime(),
     label,
-    commentID: run.commentID
+    commentID: run.commentID,
+    state
   }
   
   const showEmit = run.block.content.includes("// @showEmit") || run.block.content.includes("// @showEmit")

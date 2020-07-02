@@ -2,6 +2,7 @@ import { getOctokit } from '@actions/github'
 import { Context } from './getContext'
 
 export type Issue = {
+  id: string
   number: number
   body: string
 
@@ -16,15 +17,15 @@ export type Issue = {
 export async function getIssues(context: Context): Promise<Issue[]> {
   const octokit = getOctokit(context.token)
   const req = issuesQuery(context.owner, context.name, context.label)
-  const auth = {
-    headers: {
-      authorization: `token ${process.env.GITHUB_TOKEN}`
-    }
-  }
+  // const auth = {
+  //   headers: {
+  //     authorization: `token ${process.env.GITHUB_TOKEN}`
+  //   }
+  // }
 
   const initialIssues = (await octokit.graphql(req.query, {
     ...req.vars,
-    ...auth
+    // ...auth
   })) as any
   // TODO: check if nodes length == 100, then start looping
 
@@ -36,6 +37,7 @@ const issuesQuery = (owner: string, name: string, label: string) => {
     repository(name: $name, owner:$owner) {
       issues(labels:[$label], states:OPEN, first:100) {
         nodes {
+          id
           number
           body
 

@@ -1,8 +1,7 @@
 import { Issue } from "../getIssues";
-import { TwoslashResults } from "../runTwoslashRuns";
 import { EmbeddedTwoslashRun } from "../updatesIssue";
 
-export const getPreviousRunInfo = (issue: Issue): TwoslashResults[] | undefined => {
+export const getPreviousRunInfo = (issue: Issue): EmbeddedTwoslashRun | undefined => {
   const botComment = issue.comments.nodes.find(c => c.body.includes("<!--- TypeScriptBot"))
   if (!botComment) return undefined
 

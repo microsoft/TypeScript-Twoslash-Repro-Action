@@ -5,9 +5,10 @@ test("gets the value in and then out again", () => {
   const prefix = runInfoString({ a: "123" } as any)
   const issue: Issue = {
     body: "",
+    id: "123124",
     comments: { nodes: [{
       body: prefix + "## Some markdown etc ",
-      id: "2333"
+      id: "2333",
     }]},
     number: 23
   }

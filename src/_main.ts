@@ -3,6 +3,7 @@ import { getContext } from './getContext'
 import { issueToTwoslashRun } from './issuesToTwoslashRuns'
 import { updateIssue } from './updatesIssue'
 import { runTwoslashRuns } from './runTwoslashRuns'
+import { createAPI } from './utils/api'
 
 
 async function run() {
@@ -21,7 +22,8 @@ async function run() {
     const results = runTwoslashRuns(issue, runs)
     console.log(JSON.stringify(results, null, "  "))
     
-    await updateIssue(ctx, issue, results)
+    const api = createAPI(ctx)
+    await updateIssue(ctx, issue, results, api)
   }
 }
 

@@ -5,7 +5,7 @@ import {markdownToCodeBlocks} from '../utils/markdownToCodeBlocks'
 const exampleMD = readFileSync(join(__dirname, 'fixtures', 'exampleMarkdown.md'), 'utf8')
 
 test('converts the markdown fine', async () => {
-  const addDashR = exampleMD.split("\n").join("\r\n")
+  const addDashR = exampleMD.split('\n').join('\r\n')
   const input = markdownToCodeBlocks(addDashR)
   expect(input).toMatchInlineSnapshot(`
     Array [

@@ -7,7 +7,7 @@ const testCtx: Context = {
   name: 'myRepo',
   owner: 'orta',
   token: '123456',
-  tag: "repro"
+  tag: 'repro'
 }
 
 const oneCodeBlock = ` comment blah
@@ -31,46 +31,48 @@ console.log("Hello")\r
 const issueWithBody: Issue = {
   number: 123,
   body: oneCodeBlock,
-  id: "",
+  id: '',
   databaseId: 123,
   author: {
-    login: "hey"
+    login: 'hey'
   },
   comments: {nodes: []}
 }
 
 const issueWithBodyAndComments: Issue = {
   number: 123,
-  id: "",
+  id: '',
   databaseId: 123,
   author: {
-    login: "hello"
+    login: 'hello'
   },
   body: threeCodeBlocks,
-  comments: {nodes: [{
-    body: oneCodeBlock,
-    id: "1",
+  comments: {
+    nodes: [
+      {
+        body: oneCodeBlock,
+        id: '1',
 
-    url: "https://thing.com",
-    author: {
-      login: "hey"
-    },
-  }]}
+        url: 'https://thing.com',
+        author: {
+          login: 'hey'
+        }
+      }
+    ]
+  }
 }
 
 test('handles getting a code sample out of body', async () => {
   const input = issueToTwoslashRun(testCtx)(issueWithBody)
   expect(input.issueNumber).toEqual(123)
-  
-  const run = input.codeBlocksToRun[0]
-  expect(run.block.content).toContain("console.log")
-  expect(run.block.lang).toEqual("ts")
-})
 
+  const run = input.codeBlocksToRun[0]
+  expect(run.block.content).toContain('console.log')
+  expect(run.block.lang).toEqual('ts')
+})
 
 test('handles getting a code sample out of comments', async () => {
   const input = issueToTwoslashRun(testCtx)(issueWithBodyAndComments)
   // 2 in body, 1 in comment
   expect(input.codeBlocksToRun.length).toEqual(3)
 })
-

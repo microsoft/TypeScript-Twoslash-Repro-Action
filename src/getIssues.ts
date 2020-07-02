@@ -1,5 +1,5 @@
-import { getOctokit } from '@actions/github'
-import { Context } from './getContext'
+import {getOctokit} from '@actions/github'
+import {Context} from './getContext'
 
 export type Issue = {
   /** GQL ID */

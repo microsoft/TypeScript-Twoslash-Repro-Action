@@ -5,7 +5,7 @@ export type CodeBlock = {
 }
 
 export const markdownToCodeBlocks = (md: string) => {
-  const codeBlocks = md.split("```")
+  const codeBlocks = md.split('```')
   if (codeBlocks.length === 1) return []
 
   const blocks: CodeBlock[] = []
@@ -15,15 +15,15 @@ export const markdownToCodeBlocks = (md: string) => {
 
   codeBlocks.forEach(code => {
     if (opener) {
-      const lines = code.split("\r\n")
+      const lines = code.split('\r\n')
       const line = lines[0]
-      const [lang, ...tags] = line.split(" ")
+      const [lang, ...tags] = line.split(' ')
       lines.shift()
 
       blocks.push({
         lang,
         tags,
-        content: lines.join("\r\n")
+        content: lines.join('\r\n')
       })
     }
     opener = !opener

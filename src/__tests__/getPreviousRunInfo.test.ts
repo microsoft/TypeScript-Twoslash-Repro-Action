@@ -3,15 +3,12 @@ import { Issue } from "../getIssues";
 
 test("gets the value in and then out again", () => {
   const prefix = runInfoString({ a: "123" } as any)
+  // Only the bits that matter
   const issue: Issue = {
-    body: "",
-    id: "123124",
-    comments: { nodes: [{
+     comments: { nodes: [{
       body: prefix + "## Some markdown etc ",
-      id: "2333",
     }]},
-    number: 23
-  }
+  } as any
 
   const result = getPreviousRunInfo(issue)
   expect(result).toEqual({ a : "123" })

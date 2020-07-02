@@ -10,6 +10,7 @@ maybeTest('runs code against the older TS versions', () => {
     issueNumber: 1,
     codeBlocksToRun: [
       {
+        description: "",
         block: {
           content: "// @errors: 2588\nconst a = '123'; a = 6",
           lang: 'ts',

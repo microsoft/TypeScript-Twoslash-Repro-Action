@@ -67,7 +67,7 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
       </tr>
     </thead>
     <tbody>
-      ${summerizeRuns.sort((l, r) => r.name.localeCompare(l.name)).map(r => toRow(r.name, r.output)).join("\n")}
+      ${summerizeRuns.sort((l, r) => r.label.localeCompare(l.label)).map(r => toRow(r.label, r.output)).join("\n")}
     </tbody>
   </table>
 </td>

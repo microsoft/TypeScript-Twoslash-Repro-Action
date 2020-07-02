@@ -56,7 +56,9 @@ export const runTwoSlash = (label: string) => (
   const start = new Date()
   const getTime = () => Math.round(new Date().getTime() - start.getTime())
 
-  const tsModule = ts || require("typescript")
+  // TODO: I don't want the typescript dep to get picked up in the ncc compilation process
+  const t = "typescript"
+  const tsModule = ts || require(t)
   try {
     result = twoslasher(run.block.content, run.block.lang, {}, tsModule)
     // I have a fix for this in a PR:
@@ -65,7 +67,7 @@ export const runTwoSlash = (label: string) => (
     return {
       assertions: [],
       fails: [],
-      exception: error.name + ' - ' + error.message,
+      exception: error.name + ' - ' + error.message + "\n\n" + error.stack,
       time: getTime(),
       label,
       commentID: run.commentID,

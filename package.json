@@ -2,7 +2,7 @@
   "name": "typescript-action",
   "version": "0.0.0",
   "private": true,
-  "description": "TypeScript template action",
+  "description": "Verify Issues",
   "main": "lib/_main.js",
   "scripts": {
     "build": "tsc",

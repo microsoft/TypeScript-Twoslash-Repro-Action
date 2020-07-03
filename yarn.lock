@@ -986,19 +986,19 @@
   dependencies:
     eslint-visitor-keys "^1.1.0"
 
-"@typescript/twoslash@^0.4.0":
-  version "0.4.0"
-  resolved "https://registry.yarnpkg.com/@typescript/twoslash/-/twoslash-0.4.0.tgz#6b4004bca7456c25b453a7c156e68b29c3a296aa"
-  integrity sha512-3Gx7HH1ab8i5xUxJbqy+gx59mfTMwNVfC/WUMMzU8dFgy0/6E4PMGmI8OjQZVA3qqc3Br7NIS/n4JjepC82xhw==
+"@typescript/twoslash@^0.5.0":
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/@typescript/twoslash/-/twoslash-0.5.0.tgz#39c19eef01c827dce1b74fabf4f3e143850c8b46"
+  integrity sha512-4l+lA9duB/t17hDOeDC4xvCxOyl7Oh8o9iY9hO8cHIQZf/amCaQNtscRTUZeEL41TTFEsgJBv2E2o/OtIP391w==
   dependencies:
-    "@typescript/vfs" "1.0.0"
+    "@typescript/vfs" "1.0.1"
     debug "^4.1.1"
     lz-string "^1.4.4"
 
-"@typescript/vfs@1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@typescript/vfs/-/vfs-1.0.0.tgz#542cea6b11ceed2afb4fa7c9b8800eadd13da0db"
-  integrity sha512-Yyv2Ah7egLxs7TI2YPadkOQEJsREj8AOcXNdHRMAcRKGpD55iiLc7TsOd2WpqEuFF6oZO3U8xEJ9z+0N54sXhQ==
+"@typescript/vfs@1.0.1":
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/@typescript/vfs/-/vfs-1.0.1.tgz#bde9e19cca1fdff2b93e68ac8907c5f85ade4c3d"
+  integrity sha512-BAK+M/NnvVzu5x/1qSAsSoBiPSzlcH9GGHIwK0qF33geQKOyYR0jXo3liQPI8YzcrCLAH+rmnOQmhvDAoH0MQQ==
   dependencies:
     debug "^4.1.1"
 

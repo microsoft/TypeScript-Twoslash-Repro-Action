@@ -986,10 +986,10 @@
   dependencies:
     eslint-visitor-keys "^1.1.0"
 
-"@typescript/twoslash@^0.5.0":
-  version "0.5.0"
-  resolved "https://registry.yarnpkg.com/@typescript/twoslash/-/twoslash-0.5.0.tgz#39c19eef01c827dce1b74fabf4f3e143850c8b46"
-  integrity sha512-4l+lA9duB/t17hDOeDC4xvCxOyl7Oh8o9iY9hO8cHIQZf/amCaQNtscRTUZeEL41TTFEsgJBv2E2o/OtIP391w==
+"@typescript/twoslash@^0.5.1":
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/@typescript/twoslash/-/twoslash-0.5.1.tgz#7dbf1c9f0137b5d3102ec687e6f9f5311d10cb37"
+  integrity sha512-z34UCmsUwFBuJF7H/f/Fy+xbDyzxIobQq9iPmF7PQ3A15yRsclGq6zkRt5kBbNlqfN7NFHg9jIchzVdq71irZg==
   dependencies:
     "@typescript/vfs" "1.0.1"
     debug "^4.1.1"
@@ -1751,10 +1751,10 @@ eslint-visitor-keys@^1.1.0, eslint-visitor-keys@^1.2.0:
   resolved "https://registry.yarnpkg.com/eslint-visitor-keys/-/eslint-visitor-keys-1.3.0.tgz#30ebd1ef7c2fdff01c3a4f151044af25fab0523e"
   integrity sha512-6J72N8UNa462wa/KFODt/PJ3IU60SDpC3QXC1Hjc1BXXpfL2C9R5+AU7jhe0F6GREqVMh4Juu+NY7xn+6dipUQ==
 
-eslint@^7.3.1:
-  version "7.3.1"
-  resolved "https://registry.yarnpkg.com/eslint/-/eslint-7.3.1.tgz#76392bd7e44468d046149ba128d1566c59acbe19"
-  integrity sha512-cQC/xj9bhWUcyi/RuMbRtC3I0eW8MH0jhRELSvpKYkWep3C6YZ2OkvcvJVUeO6gcunABmzptbXBuDoXsjHmfTA==
+eslint@^7.4.0:
+  version "7.4.0"
+  resolved "https://registry.yarnpkg.com/eslint/-/eslint-7.4.0.tgz#4e35a2697e6c1972f9d6ef2b690ad319f80f206f"
+  integrity sha512-gU+lxhlPHu45H3JkEGgYhWhkR9wLHHEXC9FbWFnTlEkbKyZKWgWRLgf61E8zWmBuI6g5xKBph9ltg3NtZMVF8g==
   dependencies:
     "@babel/code-frame" "^7.0.0"
     ajv "^6.10.0"
@@ -4371,10 +4371,10 @@ typedarray-to-buffer@^3.1.5:
   dependencies:
     is-typedarray "^1.0.0"
 
-typescript@^4.0.0-dev.20200630:
-  version "4.0.0-dev.20200630"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-4.0.0-dev.20200630.tgz#73539856a18e6a417556833b35b1c0a8daf3fb3e"
-  integrity sha512-m7Eu6QG0FgdHE8nGFsHqwzo8XM6Fp/QNZMY1JYWFSYTD7bk4dHACd8gQrhTfQe1FPM6EbfHxB9rExPtQ7FGe9w==
+typescript@^3.9.6:
+  version "3.9.6"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.9.6.tgz#8f3e0198a34c3ae17091b35571d3afd31999365a"
+  integrity sha512-Pspx3oKAPJtjNwE92YS05HQoY7z2SFyOpHo9MqJor3BXAGNaPUs83CuVp9VISFkSjyRfiTpmKuAYGJB7S7hOxw==
 
 union-value@^1.0.0:
   version "1.0.1"

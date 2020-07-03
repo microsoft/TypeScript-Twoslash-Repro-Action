@@ -27,7 +27,7 @@
     "@actions/core": "^1.2.0",
     "@actions/github": "^4.0.0",
     "@typescript-eslint/eslint-plugin": "^3.5.0",
-    "@typescript/twoslash": "^0.5.0"
+    "@typescript/twoslash": "^0.5.1"
   },
   "devDependencies": {
     "@types/jest": "^26.0.3",
@@ -35,7 +35,7 @@
     "@types/node": "^14.0.14",
     "@typescript-eslint/parser": "^3.5.0",
     "@zeit/ncc": "^0.22.3",
-    "eslint": "^7.3.1",
+    "eslint": "^7.4.0",
     "eslint-plugin-jest": "^23.17.1",
     "husky": "^4.2.5",
     "jest": "^26.1.0",
@@ -44,6 +44,6 @@
     "js-yaml": "^3.13.1",
     "prettier": "^2.0.5",
     "ts-jest": "^26.1.1",
-    "typescript": "^4.0.0-dev.20200630"
+    "typescript": "^3.9.6"
   }
 }

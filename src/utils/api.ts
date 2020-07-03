@@ -2,7 +2,6 @@ import {getOctokit} from '@actions/github'
 import {Context} from '../getContext'
 
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`
-const deleteComment = `mutation($input: DeleteIssueCommentInput!) { deleteIssueComment(input: $input) { clientMutationId } }`
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`
 
 export type API = ReturnType<typeof createAPI>

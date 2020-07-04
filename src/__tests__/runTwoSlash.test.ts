@@ -8,7 +8,7 @@ maybeTest('handles a crashing test', () => {
   const broken = makeRun(`const a = 123; a = 321`)
   const result = runTwoSlash('test')(broken)
 
-  expect(result.exception).toContain(`Errors were thrown in the sample, but not included in an errors tag`)
+  expect(result.fails[0]).toContain(`Cannot assign to `)
 })
 
 maybeTest('handles a showEmit test', () => {

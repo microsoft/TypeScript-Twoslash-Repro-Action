@@ -60,7 +60,7 @@ export const runTwoSlash = (label: string) => (
   const t = 'typescript'
   const tsModule = ts || require(t)
   try {
-    result = twoslasher(run.block.content, run.block.lang, {}, tsModule)
+    result = twoslasher(run.block.content, run.block.lang, {noErrorValidation: true }, tsModule)
     // I have a fix for this in a PR:
     // result = twoslasher(run.block.content, run.block.lang, {noStaticSemanticInfo: true}, ts)
   } catch (error) {

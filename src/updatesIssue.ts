@@ -3,7 +3,7 @@ import {Context} from './getContext'
 import {TwoslashResults, RunState} from './runTwoslashRuns'
 import {getPreviousRunInfo, runInfoString} from './utils/getPreviousRunInfo'
 import {API} from './utils/api'
-import { getTypeScriptMeta } from './utils/getTypeScriptMeta'
+import {getTypeScriptMeta} from './utils/getTypeScriptMeta'
 
 export type EmbeddedTwoslashRun = {
   commentID: string | undefined
@@ -29,13 +29,13 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
 async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
   const nightlyNew = getLatest(newRuns)
 
-  const commentID= getPreviousRunInfo(issue)?.commentID
+  const commentID = getPreviousRunInfo(issue)?.commentID
   const introduction = intro(nightlyNew.length)
   const above = makeMessageForMainRuns(nightlyNew)
   const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body')
   const bottom = makeMessageForOlderRuns(groupedBySource)
 
-  const embedded = runInfoString({ runs: newRuns, commentID, typescriptNightlyVersion: "123", typescriptSHA: "1234" })
+  const embedded = runInfoString({runs: newRuns, commentID, typescriptNightlyVersion: '123', typescriptSHA: '1234'})
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
   await api.editOrCreateComment(issue.id, commentID, msg)
 }
@@ -54,8 +54,8 @@ async function postNewCommentIfChanges(newRuns: TwoslashResults[], prevRun: Twos
   const differences: [TwoslashResults, TwoslashResults][] = []
 
   // Consistently sort the runs
-  const sortedNewRuns = newRuns.sort((l, r) => (l.commentID || "__body").localeCompare(r.commentID || "__body"))
-  const sortedOldRuns = prevRun.sort((l, r) => (l.commentID || "__body").localeCompare(r.commentID || "__body"))
+  const sortedNewRuns = newRuns.sort((l, r) => (l.commentID || '__body').localeCompare(r.commentID || '__body'))
+  const sortedOldRuns = prevRun.sort((l, r) => (l.commentID || '__body').localeCompare(r.commentID || '__body'))
 
   sortedNewRuns.forEach((run, i) => {
     const oldRun = sortedOldRuns[i]
@@ -63,10 +63,10 @@ async function postNewCommentIfChanges(newRuns: TwoslashResults[], prevRun: Twos
     const oldSummary = simpleSummary(oldRun)
 
     // Nothing to say when they are the same
-    if (newSummary === oldSummary) return;
+    if (newSummary === oldSummary) return
     differences.push([oldRun, run])
-  });
-  
+  })
+
   if (differences.length) {
     const beforeSHA = getPreviousRunInfo(issue)!.typescriptSHA
     const newTSMeta = await getTypeScriptMeta()
@@ -74,13 +74,13 @@ async function postNewCommentIfChanges(newRuns: TwoslashResults[], prevRun: Twos
     const compare = `https://github.com/microsoft/TypeScript/compare/${beforeSHA}...${afterSHA}`
     const npmLink = `https://www.npmjs.com/package/typescript/v/${newTSMeta.version}`
     const intro = `Hi all, it looks like something has changed with this repro on the [nightly version](${npmLink}) of TypeScript. You can see what has changed here between ${beforeSHA} and ${afterSHA} [here](${compare}).`
-    
+
     const main = differences.map(r => {
       return `
 <h4>${r[0].description}</h4>
 ${makeFiftyFiftySplitTable(makeMessageForMainRuns([r[0]]), makeMessageForMainRuns([r[1]]))}\n\n`
     })
-    
+
     const body = `${intro}<hr />${main}`
     await api.editOrCreateComment(issue.id, undefined, body)
   }
@@ -214,5 +214,4 @@ const makeFiftyFiftySplitTable = (left: string, right: string) => {
     </tbody>
   </table>
 </td>`
-
 }

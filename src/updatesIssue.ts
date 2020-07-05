@@ -17,8 +17,9 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
 
   const previousRun = getPreviousRunInfo(issue)
   if (previousRun) {
-    const previousNightly = getLatest(previousRun.runs)
     const thisNightly = getLatest(newRuns)
+    const previousNightly = getLatest(previousRun.runs)
+    await postNewCommentIfChanges(thisNightly, previousNightly, api, issue)
   }
 }
 
@@ -35,7 +36,7 @@ async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Is
   await api.editOrCreateComment(issue.id, getPreviousRunInfo(issue)?.commentID, msg)
 }
 
-async function postNewCommentIfChanges(newRuns: TwoslashResults, prevRun: TwoslashResults, api: API, issue: Issue) {
+async function postNewCommentIfChanges(newRuns: TwoslashResults[], prevRun: TwoslashResults[], api: API, issue: Issue) {
   // await api.editOrCreateComment(issue.id, undefined, "")
 }
 

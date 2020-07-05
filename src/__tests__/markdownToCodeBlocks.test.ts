@@ -2,7 +2,7 @@ import {readFileSync} from 'fs'
 import {join} from 'path'
 import {markdownToCodeBlocks} from '../utils/markdownToCodeBlocks'
 
-const exampleMD = readFileSync(join(__dirname, 'fixtures', 'exampleMarkdown.md'), 'utf8')
+const exampleMD = readFileSync(join(__dirname, 'examples', 'exampleMarkdown.md'), 'utf8')
 
 test('converts the markdown fine', async () => {
   const addDashR = exampleMD.split('\n').join('\r\n')

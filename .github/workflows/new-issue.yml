@@ -1,0 +1,19 @@
+name: "build-test"
+on: # rebuild any PRs and main branch changes
+  issues:
+    types:
+      - opened
+      - edited
+
+jobs:
+  build: # make sure build/ci work properly
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - run: yarn add typescript@next
+    - run: yarn build || echo "It's OK"
+    - run: yarn test
+    - run: yarn deploy
+    - uses: ./
+      with: 
+        github-token: ${{ secrets.TS_BOT_GITHUB_TOKEN }}

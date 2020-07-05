@@ -13,26 +13,39 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
   console.log('updating issue', issue.number, issue.id)
   if (newRuns.length === 0) return
 
+  await updateMainComment(newRuns, api, issue)
+
+  
   const previousRun = getPreviousRunInfo(issue)
+  if (previousRun) {
+    const previousNightly = getLatest(previousRun.runs)
+    const thisNightly = getLatest(newRuns)
 
+  }
+}
+
+
+async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
   const nightlyNew = getLatest(newRuns)
-  const previousNightly = getLatest(newRuns)
 
-  const above = makeMessageForMainRuns(nightlyNew, previousNightly)
+  const above = makeMessageForMainRuns(nightlyNew)
 
   const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body')
   const bottom = makeMessageForOlderRuns(groupedBySource)
 
   const embedded = runInfoString(newRuns)
   const msg = `${above}\n\n${bottom}\n\n${embedded}`
-  await api.editOrCreateComment(issue.id, previousRun?.commentID, msg)
+  await api.editOrCreateComment(issue.id, getPreviousRunInfo(issue)?.commentID, msg)
 }
 
-/** Above the fold */
-const makeMessageForMainRuns = (newLatestRuns: TwoslashResults[], oldLatestRuns: TwoslashResults[]) => {
-  // If they're inconsistent, then treat it as though there are no latest runs
-  if (newLatestRuns.length !== oldLatestRuns.length) oldLatestRuns.splice(0, oldLatestRuns.length)
+async function postNewCommentIfChanges(newRuns: TwoslashResults, prevRun: TwoslashResults, api: API, issue: Issue) {
 
+  await api.editOrCreateComment(issue.id, undefined, msg)
+} 
+
+
+/** Above the fold */
+export const makeMessageForMainRuns = (newLatestRuns: TwoslashResults[]) => {
   const groupedBySource = groupBy(newLatestRuns, ts => ts.commentID || '__body')
   const sources = Object.keys(groupedBySource).sort().reverse()
 
@@ -82,6 +95,7 @@ ${inner.join('\n\n')}
   </detail>
   `
 }
+
 
 // https://gist.github.com/JamieMason/0566f8412af9fe6a1d470aa1e089a752#gistcomment-2999506
 function groupBy<T extends any, K extends keyof T>(array: T[], key: K | {(obj: T): string}): Record<string, T[]> {

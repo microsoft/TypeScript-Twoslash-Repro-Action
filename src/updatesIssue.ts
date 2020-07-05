@@ -15,15 +15,12 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
 
   await updateMainComment(newRuns, api, issue)
 
-  
   const previousRun = getPreviousRunInfo(issue)
   if (previousRun) {
     const previousNightly = getLatest(previousRun.runs)
     const thisNightly = getLatest(newRuns)
-
   }
 }
-
 
 async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
   const nightlyNew = getLatest(newRuns)
@@ -39,10 +36,8 @@ async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Is
 }
 
 async function postNewCommentIfChanges(newRuns: TwoslashResults, prevRun: TwoslashResults, api: API, issue: Issue) {
-
-  await api.editOrCreateComment(issue.id, undefined, msg)
-} 
-
+  // await api.editOrCreateComment(issue.id, undefined, "")
+}
 
 /** Above the fold */
 export const makeMessageForMainRuns = (newLatestRuns: TwoslashResults[]) => {
@@ -95,7 +90,6 @@ ${inner.join('\n\n')}
   </detail>
   `
 }
-
 
 // https://gist.github.com/JamieMason/0566f8412af9fe6a1d470aa1e089a752#gistcomment-2999506
 function groupBy<T extends any, K extends keyof T>(array: T[], key: K | {(obj: T): string}): Record<string, T[]> {

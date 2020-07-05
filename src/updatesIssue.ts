@@ -29,15 +29,16 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
 async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
   const nightlyNew = getLatest(newRuns)
 
-  const commentID = getPreviousRunInfo(issue)?.commentID
+  const runInfo = getPreviousRunInfo(issue)
   const introduction = intro(nightlyNew.length)
   const above = makeMessageForMainRuns(nightlyNew)
   const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body')
   const bottom = makeMessageForOlderRuns(groupedBySource)
+  const newTSMeta = await getTypeScriptMeta()
 
-  const embedded = runInfoString({runs: newRuns, commentID, typescriptNightlyVersion: '123', typescriptSHA: '1234'})
+  const embedded = runInfoString({runs: newRuns, commentID: runInfo?.commentID, typescriptNightlyVersion: newTSMeta.version, typescriptSHA: newTSMeta.sha})
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
-  await api.editOrCreateComment(issue.id, commentID, msg)
+  await api.editOrCreateComment(issue.id, runInfo?.commentID, msg)
 }
 
 const intro = (runLength: number) => {
@@ -70,15 +71,17 @@ async function postNewCommentIfChanges(newRuns: TwoslashResults[], prevRun: Twos
   if (differences.length) {
     const beforeSHA = getPreviousRunInfo(issue)!.typescriptSHA
     const newTSMeta = await getTypeScriptMeta()
-    const afterSHA = newTSMeta
+    const afterSHA = newTSMeta.sha
     const compare = `https://github.com/microsoft/TypeScript/compare/${beforeSHA}...${afterSHA}`
     const npmLink = `https://www.npmjs.com/package/typescript/v/${newTSMeta.version}`
-    const intro = `Hi all, it looks like something has changed with this repro on the [nightly version](${npmLink}) of TypeScript. You can see what has changed here between ${beforeSHA} and ${afterSHA} [here](${compare}).`
+    const intro = `It looks like something has changed with this repro on today's [nightly build](${npmLink}) of TypeScript. You can see what has changed on TypeScript between ${beforeSHA} and ${afterSHA} [here](${compare}).`
 
     const main = differences.map(r => {
+      const left = summerizeRunsAsHTML([r[0]])[0]
+      const right = summerizeRunsAsHTML([r[1]])[0]
       return `
 <h4>${r[0].description}</h4>
-${makeFiftyFiftySplitTable(makeMessageForMainRuns([r[0]]), makeMessageForMainRuns([r[1]]))}\n\n`
+${makeFiftyFiftySplitTable(left.output, right.output)}\n\n`
     })
 
     const body = `${intro}<hr />${main}`

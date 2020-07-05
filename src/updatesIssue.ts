@@ -26,18 +26,26 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
 async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
   const nightlyNew = getLatest(newRuns)
 
+  const introduction = intro(nightlyNew.length)
   const above = makeMessageForMainRuns(nightlyNew)
-
   const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body')
   const bottom = makeMessageForOlderRuns(groupedBySource)
 
   const embedded = runInfoString(newRuns)
-  const msg = `${above}\n\n${bottom}\n\n${embedded}`
+  const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
   await api.editOrCreateComment(issue.id, getPreviousRunInfo(issue)?.commentID, msg)
 }
 
+const intro = (runLength: number) => {
+  const repros = runLength === 1 ? "repro" : `${runLength} repros`
+  const docsLink = "https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md"
+  return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue.`
+} 
+
+
 async function postNewCommentIfChanges(newRuns: TwoslashResults[], prevRun: TwoslashResults[], api: API, issue: Issue) {
   // await api.editOrCreateComment(issue.id, undefined, "")
+
 }
 
 /** Above the fold */

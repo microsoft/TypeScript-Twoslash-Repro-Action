@@ -67,7 +67,7 @@ export const runTwoSlash = (label: string) => (
     return {
       assertions: [],
       fails: [],
-      exception: error.name + ' - ' + error.message + '\n\n```n' + error.stack + '\n```\n\n',
+      exception: error.name + ' - ' + error.message + '\n\n```\n' + error.stack + '\n```\n\n',
       time: getTime(),
       label,
       commentID: run.commentID,

@@ -2,7 +2,7 @@ import {Issue} from '../getIssues'
 import {EmbeddedTwoslashRun} from '../updatesIssue'
 
 export const getPreviousRunInfo = (issue: Issue): EmbeddedTwoslashRun | undefined => {
-  const botComment = issue.comments.nodes.find(c => c.body.includes('<!--- TypeScriptBot'))
+  const botComment = issue.comments.nodes.filter(c => c.body.includes('<!--- TypeScriptBot')).pop()
   if (!botComment) return undefined
 
   try {

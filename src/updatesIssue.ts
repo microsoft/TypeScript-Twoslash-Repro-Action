@@ -36,7 +36,12 @@ async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Is
   const bottom = makeMessageForOlderRuns(groupedBySource)
   const newTSMeta = await getTypeScriptMeta()
 
-  const embedded = runInfoString({runs: newRuns, commentID: runInfo?.commentID, typescriptNightlyVersion: newTSMeta.version, typescriptSHA: newTSMeta.sha})
+  const embedded = runInfoString({
+    runs: newRuns,
+    commentID: runInfo?.commentID,
+    typescriptNightlyVersion: newTSMeta.version,
+    typescriptSHA: newTSMeta.sha
+  })
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
   await api.editOrCreateComment(issue.id, runInfo?.commentID, msg)
 }

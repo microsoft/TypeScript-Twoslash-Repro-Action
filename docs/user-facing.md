@@ -6,11 +6,11 @@ It builds on [Twoslash code markup](https://www.npmjs.com/package/@typescript/tw
 
 - Looks through all issues which have the label "Has Repro"
 - Extracts code samples in each issue from the body and comments, repros are codeblocks like:
-  ```
-  `'`ts repro
+  ````
+  ```ts repro
   const hello = "world"
-  `'`
   ```
+  ````
 
 - Loops through the code samples with trying the latest nightly TypeScript, and for the first time it is seen the last 5 versions of TypeScript
 - Leave / Updates a comment on the state of all the different results from the twoslash run

@@ -13,7 +13,7 @@ export type EmbeddedTwoslashRun = {
 }
 
 export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: TwoslashResults[], api: API) => {
-  console.log('updating issue', issue.number, issue.id)
+  console.log('\nUpdating issue: ', issue.number, '')
   if (newRuns.length === 0) return
 
   await updateMainComment(newRuns, api, issue)

@@ -1,6 +1,6 @@
 import {TwoslashRun} from './issuesToTwoslashRuns'
 import {twoslasher} from '@typescript/twoslash'
-import {readdirSync} from 'fs'
+import {existsSync, readdirSync} from 'fs'
 import {join} from 'path'
 import {Issue} from './getIssues'
 import {getPreviousRunInfo} from './utils/getPreviousRunInfo'
@@ -39,9 +39,12 @@ export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResult
 }
 
 export const runTwoSlashOnOlderVersions = (run: TwoslashRun['codeBlocksToRun'][number]) => {
-  const tsVersions = readdirSync(join(__dirname, '..', 'ts')).filter(f => f.split('.').length !== 2)
+  //                       dev                                  prod
+  const possibleTSRoots = [join(__dirname, '..', 'dist', 'ts'), join(__dirname, 'ts')]
+  const tsRoot = possibleTSRoots.find(f => existsSync(f))!
+  const tsVersions = readdirSync(tsRoot).filter(f => f.split('.').length !== 2)
   return tsVersions.map(tsVersion => {
-    const ts = require(join(__dirname, '..', 'ts', tsVersion))
+    const ts = require(join(tsRoot, tsVersion))
     return runTwoSlash(tsVersion)(run, ts)
   })
 }

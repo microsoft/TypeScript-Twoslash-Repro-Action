@@ -1,6 +1,6 @@
-name: 'Create reproductions in an issue'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'Create TS compiler reproductions in an issue'
+description: 'Does what it says on the tin'
+author: 'Microsoft'
 inputs:
   github-token:
     description: 'API token for GitHub requests'
@@ -8,7 +8,7 @@ inputs:
 
   label:
     description: 'What label should be on an issue to indicate it has a repro?'
-    default: 'has repro'
+    default: 'as repro'
 
   repo:
     description: 'What repo should this action look at, if not set it uses the same repo'

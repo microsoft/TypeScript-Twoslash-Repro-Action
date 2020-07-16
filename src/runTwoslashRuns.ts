@@ -44,7 +44,7 @@ export const runTwoSlashOnOlderVersions = (run: TwoslashRun['codeBlocksToRun'][n
   const tsRoot = possibleTSRoots.find(f => existsSync(f))!
   const tsVersions = readdirSync(tsRoot).filter(f => f.split('.').length !== 2)
   return tsVersions.map(tsVersion => {
-    const ts = require(join(__dirname, '..', 'ts', tsVersion))
+    const ts = require(join(tsRoot, tsVersion))
     return runTwoSlash(tsVersion)(run, ts)
   })
 }

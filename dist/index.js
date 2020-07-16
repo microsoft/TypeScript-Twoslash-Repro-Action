@@ -2444,7 +2444,7 @@ exports.runTwoSlashOnOlderVersions = (run) => {
     const tsRoot = possibleTSRoots.find(f => fs_1.existsSync(f));
     const tsVersions = fs_1.readdirSync(tsRoot).filter(f => f.split('.').length !== 2);
     return tsVersions.map(tsVersion => {
-        const ts = require(path_1.join(__dirname, '..', 'ts', tsVersion));
+        const ts = require(path_1.join(tsRoot, tsVersion));
         return exports.runTwoSlash(tsVersion)(run, ts);
     });
 };

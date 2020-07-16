@@ -19,7 +19,6 @@ async function run() {
     const runs = issueToTwoslashRun(ctx)(issue)
 
     const results = runTwoslashRuns(issue, runs)
-    console.log(JSON.stringify(results, null, '  '))
 
     const api = createAPI(ctx)
     await updateIssue(ctx, issue, results, api)

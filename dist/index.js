@@ -1418,7 +1418,6 @@ async function run() {
             console.log('');
         const runs = issuesToTwoslashRuns_1.issueToTwoslashRun(ctx)(issue);
         const results = runTwoslashRuns_1.runTwoslashRuns(issue, runs);
-        console.log(JSON.stringify(results, null, '  '));
         const api = api_1.createAPI(ctx);
         await updatesIssue_1.updateIssue(ctx, issue, results, api);
     }

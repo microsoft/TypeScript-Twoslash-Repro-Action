@@ -3,7 +3,7 @@
 
 Runs as a part of a nightly task in GitHub's CI. This action will:
 
-- Looks through all issues which have a specific label (default: `"Valid Repro"`)
+- Looks through all issues which have a specific label (default: `"Has Repro"`)
 - Uses extracts code samples in the issue from markdown in the body and comments (codeblocks with `repro`)
 - Loops through the code samples with 
 - Leave / Updates a comment on the state of all the different results from the twoslash sample

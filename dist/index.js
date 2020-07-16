@@ -9094,7 +9094,7 @@ exports.makeMessageForMainRuns = exports.updateIssue = void 0;
 const getPreviousRunInfo_1 = __webpack_require__(707);
 const getTypeScriptMeta_1 = __webpack_require__(772);
 exports.updateIssue = async (_ctx, issue, newRuns, api) => {
-    console.log('\nUpdating issue: ', issue.number, '');
+    process.stdout.write(`\nUpdating issue ${issue.number}: `);
     if (newRuns.length === 0)
         return;
     await updateMainComment(newRuns, api, issue);

@@ -17,13 +17,6 @@ export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: Twoslash
   if (newRuns.length === 0) return
 
   await updateMainComment(newRuns, api, issue)
-
-  const previousRun = getPreviousRunInfo(issue)
-  if (previousRun) {
-    const thisNightly = getLatest(newRuns)
-    const previousNightly = getLatest(previousRun.runs)
-    await postNewCommentIfChanges(thisNightly, previousNightly, api, issue)
-  }
 }
 
 async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
@@ -50,48 +43,6 @@ const intro = (runLength: number) => {
   const repros = runLength === 1 ? 'repro' : `${runLength} repros`
   const docsLink = 'https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md'
   return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript. If something changes, I will post a new comment.<hr />`
-}
-
-async function postNewCommentIfChanges(newRuns: TwoslashResults[], prevRun: TwoslashResults[], api: API, issue: Issue) {
-  if (prevRun.length === 0) return
-  // Can't be directly compared
-  if (newRuns.length !== prevRun.length) return
-
-  const differences: [TwoslashResults, TwoslashResults][] = []
-
-  // Consistently sort the runs
-  const sortedNewRuns = newRuns.sort((l, r) => (l.commentID || '__body').localeCompare(r.commentID || '__body'))
-  const sortedOldRuns = prevRun.sort((l, r) => (l.commentID || '__body').localeCompare(r.commentID || '__body'))
-
-  sortedNewRuns.forEach((run, i) => {
-    const oldRun = sortedOldRuns[i]
-    const newSummary = simpleSummary(run)
-    const oldSummary = simpleSummary(oldRun)
-
-    // Nothing to say when they are the same
-    if (newSummary === oldSummary) return
-    differences.push([oldRun, run])
-  })
-
-  if (differences.length) {
-    const beforeSHA = getPreviousRunInfo(issue)!.typescriptSHA
-    const newTSMeta = await getTypeScriptMeta()
-    const afterSHA = newTSMeta.sha
-    const compare = `https://github.com/microsoft/TypeScript/compare/${beforeSHA}...${afterSHA}`
-    const npmLink = `https://www.npmjs.com/package/typescript/v/${newTSMeta.version}`
-    const intro = `It looks like something has changed with this repro on today's [nightly build](${npmLink}) of TypeScript. You can see what has changed on TypeScript between ${beforeSHA} and ${afterSHA} [here](${compare}).`
-
-    const main = differences.map(r => {
-      const left = summerizeRunsAsHTML([r[0]])[0]
-      const right = summerizeRunsAsHTML([r[1]])[0]
-      return `
-<h4>${r[0].description}</h4>
-${makeFiftyFiftySplitTable(left.output, right.output)}\n\n`
-    })
-
-    const body = `${intro}<hr />${main}`
-    await api.editOrCreateComment(issue.id, undefined, body)
-  }
 }
 
 /** Above the fold */
@@ -199,27 +150,3 @@ const summerizeRunsAsHTML = (runs: TwoslashResults[]) => {
 }
 
 const getLatest = (runs: TwoslashResults[]) => runs.filter(r => r.label === 'Nightly')
-
-const makeFiftyFiftySplitTable = (left: string, right: string) => {
-  return `
-  <td>
-  <table role="table">
-    <thead>
-      <tr>
-        <th width="50%">Before</th>
-        <th width="50%">After</th>
-      </tr>
-    </thead>
-    <tbody>
-    <tr>
-      <td>
-        ${left}
-      </td>
-      <td>
-        ${right}
-      </td>
-    </tr>
-    </tbody>
-  </table>
-</td>`
-}

@@ -60,11 +60,12 @@ export const runTwoSlash = (label: string) => (
   const getTime = () => Math.round(new Date().getTime() - start.getTime())
 
   // TypeScript dep needs to be looked up by the workflow define parts of the FS first
-  const typeScripts = ['/home/runner/work/TypeScript/node_modules/TypeScript']
+  const typeScripts = ['/home/runner/work/TypeScript/node_modules/typescript']
   const t = typeScripts.find(tpath => existsSync(tpath)) || 'typescript'
   console.log(t)
-  console.log(readdirSync('/home/runner/work/TypeScript/node_modules/TypeScript'))
   console.log(readdirSync('/home/runner/work/TypeScript/'))
+  console.log(readdirSync('/home/runner/work/TypeScript/node_modules'))
+  console.log(readdirSync('/home/runner/work/TypeScript/node_modules/typescript'))
   const tsModule = ts || require(t)
   try {
     const opts = {noErrorValidation: true, noStaticSemanticInfo: true}

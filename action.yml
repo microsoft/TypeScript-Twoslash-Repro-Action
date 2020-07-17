@@ -8,7 +8,7 @@ inputs:
 
   label:
     description: 'What label should be on an issue to indicate it has a repro?'
-    default: 'has repro'
+    default: 'Has Repro'
 
   repo:
     description: 'What repo should this action look at, if not set it uses the same repo'

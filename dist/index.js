@@ -2453,13 +2453,13 @@ exports.runTwoSlash = (label) => (run, ts) => {
     let result;
     const start = new Date();
     const getTime = () => Math.round(new Date().getTime() - start.getTime());
-    // TODO: I don't want the typescript dep to get picked up in the ncc compilation process
-    const t = 'typescript';
-    const tsModule = ts || __webpack_require__(34);
+    // TypeScript dep needs to be looked up by the workflow define parts of the FS first
+    const typeScripts = ['/home/runner/work/TypeScript/node_modules/TypeScript'];
+    const t = typeScripts.find(tpath => fs_1.existsSync(tpath)) || 'typescript';
+    const tsModule = ts || require(t);
     try {
-        result = twoslash_1.twoslasher(run.block.content, run.block.lang, { noErrorValidation: true }, tsModule);
-        // I have a fix for this in a PR:
-        // result = twoslasher(run.block.content, run.block.lang, {noStaticSemanticInfo: true}, ts)
+        const opts = { noErrorValidation: true, noStaticSemanticInfo: true };
+        result = twoslash_1.twoslasher(run.block.content, run.block.lang, opts, tsModule);
     }
     catch (error) {
         return {

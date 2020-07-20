@@ -246,73 +246,6 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 15:
-/***/ (function(module) {
-
-"use strict";
-
-
-const isWin = process.platform === 'win32';
-
-function notFoundError(original, syscall) {
-    return Object.assign(new Error(`${syscall} ${original.command} ENOENT`), {
-        code: 'ENOENT',
-        errno: 'ENOENT',
-        syscall: `${syscall} ${original.command}`,
-        path: original.command,
-        spawnargs: original.args,
-    });
-}
-
-function hookChildProcess(cp, parsed) {
-    if (!isWin) {
-        return;
-    }
-
-    const originalEmit = cp.emit;
-
-    cp.emit = function (name, arg1) {
-        // If emitting "exit" event and exit code is 1, we need to check if
-        // the command exists and emit an "error" instead
-        // See https://github.com/IndigoUnited/node-cross-spawn/issues/16
-        if (name === 'exit') {
-            const err = verifyENOENT(arg1, parsed, 'spawn');
-
-            if (err) {
-                return originalEmit.call(cp, 'error', err);
-            }
-        }
-
-        return originalEmit.apply(cp, arguments); // eslint-disable-line prefer-rest-params
-    };
-}
-
-function verifyENOENT(status, parsed) {
-    if (isWin && status === 1 && !parsed.file) {
-        return notFoundError(parsed.original, 'spawn');
-    }
-
-    return null;
-}
-
-function verifyENOENTSync(status, parsed) {
-    if (isWin && status === 1 && !parsed.file) {
-        return notFoundError(parsed.original, 'spawnSync');
-    }
-
-    return null;
-}
-
-module.exports = {
-    hookChildProcess,
-    verifyENOENT,
-    verifyENOENTSync,
-    notFoundError,
-};
-
-
-/***/ }),
-
 /***/ 16:
 /***/ (function(module) {
 
@@ -324,6 +257,53 @@ module.exports = require("tls");
 /***/ (function(module) {
 
 module.exports = eval("require")("encoding");
+
+
+/***/ }),
+
+/***/ 20:
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+const cp = __webpack_require__(129);
+const parse = __webpack_require__(568);
+const enoent = __webpack_require__(881);
+
+function spawn(command, args, options) {
+    // Parse the arguments
+    const parsed = parse(command, args, options);
+
+    // Spawn the child process
+    const spawned = cp.spawn(parsed.command, parsed.args, parsed.options);
+
+    // Hook into child process "exit" event to emit an error if the command
+    // does not exists, see: https://github.com/IndigoUnited/node-cross-spawn/issues/16
+    enoent.hookChildProcess(spawned, parsed);
+
+    return spawned;
+}
+
+function spawnSync(command, args, options) {
+    // Parse the arguments
+    const parsed = parse(command, args, options);
+
+    // Spawn the child process
+    const result = cp.spawnSync(parsed.command, parsed.args, parsed.options);
+
+    // Analyze if the command does not exist, see: https://github.com/IndigoUnited/node-cross-spawn/issues/16
+    result.error = result.error || enoent.verifyENOENTSync(result.status, parsed);
+
+    return result;
+}
+
+module.exports = spawn;
+module.exports.spawn = spawn;
+module.exports.sync = spawnSync;
+
+module.exports._parse = parse;
+module.exports._enoent = enoent;
 
 
 /***/ }),
@@ -570,7 +550,12 @@ function validateInput(code) {
   }
 }
 
-var hasLocalStorage = typeof localStorage !== "undefined";
+var hasLocalStorage = false;
+
+try {
+  hasLocalStorage = typeof localStorage !== "undefined";
+} catch (error) {}
+
 var hasProcess = typeof process !== "undefined";
 var shouldDebug = hasLocalStorage &&
 /*#__PURE__*/
@@ -812,37 +797,41 @@ function filterHandbookOptions(codeLines) {
  *
  * @param code The twoslash markup'd code
  * @param extension For example: "ts", "tsx", "typescript", "javascript" or "js".
- * @param defaultOptions Allows setting any of the handbook options from outside the function, useful if you don't want LSP identifiers
- * @param tsModule An optional copy of the TypeScript import, if missing it will be require'd.
- * @param lzstringModule An optional copy of the lz-string import, if missing it will be require'd.
- * @param fsMap An optional Map object which is passed into @typescript/vfs - if you are using twoslash on the
- *              web then you'll need this to set up your lib *.d.ts files. If missing, it will use your fs.
+ * @param options Additional options for twoslash
  */
 
 
-function twoslasher(code, extension, defaultOptions, tsModule, lzstringModule, fsMap) {
-  var ts = tsModule !== null && tsModule !== void 0 ? tsModule : __webpack_require__(34);
-  var lzstring = lzstringModule !== null && lzstringModule !== void 0 ? lzstringModule : __webpack_require__(637);
+function twoslasher(code, extension, options) {
+  var _options$tsModule, _options$lzstringModu, _options$defaultCompi, _options$fsMap;
+
+  if (options === void 0) {
+    options = {};
+  }
+
+  var ts = (_options$tsModule = options.tsModule) !== null && _options$tsModule !== void 0 ? _options$tsModule : __webpack_require__(34);
+  var lzstring = (_options$lzstringModu = options.lzstringModule) !== null && _options$lzstringModu !== void 0 ? _options$lzstringModu : __webpack_require__(637);
   var originalCode = code;
   var safeExtension = typesToExtension(extension);
   var defaultFileName = "index." + safeExtension;
   log("\n\nLooking at code: \n```" + safeExtension + "\n" + code + "\n```\n");
-  var defaultCompilerOptions = {
+
+  var defaultCompilerOptions = _extends({
     strict: true,
     target: ts.ScriptTarget.ES2016,
     allowJs: true
-  };
+  }, (_options$defaultCompi = options.defaultCompilerOptions) !== null && _options$defaultCompi !== void 0 ? _options$defaultCompi : {});
+
   validateInput(code);
   code = cleanMarkdownEscaped(code); // This is mutated as the below functions pull out info
 
   var codeLines = code.split(/\r\n?|\n/g);
 
-  var handbookOptions = _extends({}, filterHandbookOptions(codeLines), {}, defaultOptions);
+  var handbookOptions = _extends({}, filterHandbookOptions(codeLines), {}, options.defaultOptions);
 
   var compilerOptions = filterCompilerOptions(codeLines, defaultCompilerOptions, ts);
-  var vfs$1 = fsMap !== null && fsMap !== void 0 ? fsMap : createLocallyPoweredVFS(compilerOptions);
+  var vfs$1 = (_options$fsMap = options.fsMap) !== null && _options$fsMap !== void 0 ? _options$fsMap : createLocallyPoweredVFS(compilerOptions, ts);
   var system = vfs.createSystem(vfs$1);
-  var env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+  var env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions, options.customTransformers);
   var ls = env.languageService;
   code = codeLines.join("\n");
   var partialQueries = [];
@@ -1204,8 +1193,8 @@ function twoslasher(code, extension, defaultOptions, tsModule, lzstringModule, f
   };
 }
 
-var createLocallyPoweredVFS = function createLocallyPoweredVFS(compilerOptions) {
-  return vfs.createDefaultMapFromNodeModules(compilerOptions);
+var createLocallyPoweredVFS = function createLocallyPoweredVFS(compilerOptions, ts) {
+  return vfs.createDefaultMapFromNodeModules(compilerOptions, ts);
 };
 
 var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defaultFileName) {
@@ -1249,148 +1238,6 @@ var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defau
 
 exports.twoslasher = twoslasher;
 //# sourceMappingURL=twoslash.cjs.development.js.map
-
-
-/***/ }),
-
-/***/ 55:
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-module.exports = which
-which.sync = whichSync
-
-var isWindows = process.platform === 'win32' ||
-    process.env.OSTYPE === 'cygwin' ||
-    process.env.OSTYPE === 'msys'
-
-var path = __webpack_require__(622)
-var COLON = isWindows ? ';' : ':'
-var isexe = __webpack_require__(742)
-
-function getNotFoundError (cmd) {
-  var er = new Error('not found: ' + cmd)
-  er.code = 'ENOENT'
-
-  return er
-}
-
-function getPathInfo (cmd, opt) {
-  var colon = opt.colon || COLON
-  var pathEnv = opt.path || process.env.PATH || ''
-  var pathExt = ['']
-
-  pathEnv = pathEnv.split(colon)
-
-  var pathExtExe = ''
-  if (isWindows) {
-    pathEnv.unshift(process.cwd())
-    pathExtExe = (opt.pathExt || process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM')
-    pathExt = pathExtExe.split(colon)
-
-
-    // Always test the cmd itself first.  isexe will check to make sure
-    // it's found in the pathExt set.
-    if (cmd.indexOf('.') !== -1 && pathExt[0] !== '')
-      pathExt.unshift('')
-  }
-
-  // If it has a slash, then we don't bother searching the pathenv.
-  // just check the file itself, and that's it.
-  if (cmd.match(/\//) || isWindows && cmd.match(/\\/))
-    pathEnv = ['']
-
-  return {
-    env: pathEnv,
-    ext: pathExt,
-    extExe: pathExtExe
-  }
-}
-
-function which (cmd, opt, cb) {
-  if (typeof opt === 'function') {
-    cb = opt
-    opt = {}
-  }
-
-  var info = getPathInfo(cmd, opt)
-  var pathEnv = info.env
-  var pathExt = info.ext
-  var pathExtExe = info.extExe
-  var found = []
-
-  ;(function F (i, l) {
-    if (i === l) {
-      if (opt.all && found.length)
-        return cb(null, found)
-      else
-        return cb(getNotFoundError(cmd))
-    }
-
-    var pathPart = pathEnv[i]
-    if (pathPart.charAt(0) === '"' && pathPart.slice(-1) === '"')
-      pathPart = pathPart.slice(1, -1)
-
-    var p = path.join(pathPart, cmd)
-    if (!pathPart && (/^\.[\\\/]/).test(cmd)) {
-      p = cmd.slice(0, 2) + p
-    }
-    ;(function E (ii, ll) {
-      if (ii === ll) return F(i + 1, l)
-      var ext = pathExt[ii]
-      isexe(p + ext, { pathExt: pathExtExe }, function (er, is) {
-        if (!er && is) {
-          if (opt.all)
-            found.push(p + ext)
-          else
-            return cb(null, p + ext)
-        }
-        return E(ii + 1, ll)
-      })
-    })(0, pathExt.length)
-  })(0, pathEnv.length)
-}
-
-function whichSync (cmd, opt) {
-  opt = opt || {}
-
-  var info = getPathInfo(cmd, opt)
-  var pathEnv = info.env
-  var pathExt = info.ext
-  var pathExtExe = info.extExe
-  var found = []
-
-  for (var i = 0, l = pathEnv.length; i < l; i ++) {
-    var pathPart = pathEnv[i]
-    if (pathPart.charAt(0) === '"' && pathPart.slice(-1) === '"')
-      pathPart = pathPart.slice(1, -1)
-
-    var p = path.join(pathPart, cmd)
-    if (!pathPart && /^\.[\\\/]/.test(cmd)) {
-      p = cmd.slice(0, 2) + p
-    }
-    for (var j = 0, ll = pathExt.length; j < ll; j ++) {
-      var cur = p + pathExt[j]
-      var is
-      try {
-        is = isexe.sync(cur, { pathExt: pathExtExe })
-        if (is) {
-          if (opt.all)
-            found.push(cur)
-          else
-            return cur
-        }
-      } catch (ex) {}
-    }
-  }
-
-  if (opt.all && found.length)
-    return found
-
-  if (opt.nothrow)
-    return null
-
-  throw getNotFoundError(cmd)
-}
 
 
 /***/ }),
@@ -1902,7 +1749,7 @@ module.exports.MaxBufferError = MaxBufferError;
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
-Object.defineProperty(exports,"__esModule",{value:!0});var e=__webpack_require__(640);function t(){return(t=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var n in r)Object.prototype.hasOwnProperty.call(r,n)&&(e[n]=r[n])}return e}).apply(this,arguments)}function r(e,t){switch(t){case"number":return+e;case"string":return e;case"boolean":return"true"===e.toLowerCase()||0===e.length}throw new Error("Unknown primitive type "+t+" with - "+e)}var n="undefined"!=typeof localStorage,i="undefined"!=typeof process,o=n&&localStorage.getItem("DEBUG")||i&&process.env.DEBUG?console.log:function(e){return""};function a(e){for(var t=[],r=[],n=0,i=0,a=0,s=function(s){var c=e[s],f=function(){i=n,n+=c.length+1},u=function(t){o("Removing line "+s+" for "+t),a++,e.splice(s,1),s--};if(c.includes("//")){var p=/^\/\/\s*\^+( .+)?$/.exec(c),d=/^\/\/\s*\^\?\s*$/.exec(c),h=/^\s*\/\/ prettier-ignore$/.exec(c),g=/^\/\/\s*\^\|$/.exec(c);if(null!==d){var m=c.indexOf("^");r.push({kind:"query",offset:m,text:void 0,docs:void 0,line:s+a-1}),u("having a query")}else if(null!==p){var v=c.indexOf("^"),y=c.lastIndexOf("^")-v+1,x=i+v,w=p[1]?p[1].trim():"";t.push({kind:"highlight",position:x,length:y,description:w,line:s}),u("having a highlight")}else if(null!==h)u("being a prettier ignore");else if(null!==g){var E=c.indexOf("^");r.push({kind:"completion",offset:E,text:void 0,docs:void 0,line:s+a-1}),u("having a completion query")}else f()}else f();l=s},l=0;l<e.length;l++)s(l);return{highlights:t,queries:r}}function s(e,t,n,i){o("Setting "+e+" to "+t);var a=function(){if(l){if(c>=s.length)return"break";f=s[c++]}else{if((c=s.next()).done)return"break";f=c.value}var i=f;if(i.name.toLowerCase()===e.toLowerCase()){switch(i.type){case"number":case"string":case"boolean":n[i.name]=r(t,i.type);break;case"list":n[i.name]=t.split(",").map((function(e){return r(e,i.element.type)}));break;default:var a=i.type;if(n[i.name]=a.get(t.toLowerCase()),o("Set "+i.name+" to "+n[i.name]),void 0===n[i.name]){var u=Array.from(a.keys());throw new Error("Invalid value "+t+" for "+i.name+". Allowed values: "+u.join(","))}}return{v:void 0}}},s=i.optionDeclarations,l=Array.isArray(s),c=0;e:for(s=l?s:s[Symbol.iterator]();;){var f,u=a();switch(u){case"break":break e;default:if("object"==typeof u)return u.v}}throw new Error("No compiler setting named '"+e+"' exists!")}var l=/^\/\/\s?@(\w+)$/,c=/^\/\/\s?@(\w+):\s?(.+)$/,f={errors:[],noErrors:!1,showEmit:!1,showEmittedFile:"index.js",noStaticSemanticInfo:!1,emit:!1,noErrorValidation:!1};exports.twoslasher=function(r,n,i,u,p,d){var h=null!=u?u:__webpack_require__(34),g=null!=p?p:__webpack_require__(637),m=r,v=function(e){switch(e){case"js":case"javascript":return"js";case"ts":case"typescript":return"ts";case"tsx":return"tsx";case"jsn":return"json"}throw new Error("Cannot handle the file extension:"+e)}(n),y="index."+v;o("\n\nLooking at code: \n```"+v+"\n"+r+"\n```\n");var x={strict:!0,target:h.ScriptTarget.ES2016,allowJs:!0};!function(e){if(e.includes("// @errors "))throw new Error("You have '@errors ' - you're missing the colon after errors");if(e.includes("// @filename "))throw new Error("You have '@filename ' - you're missing the colon after filename")}(r);var w=(r=function(e){return(e=e.replace(/¨D/g,"$")).replace(/¨T/g,"~")}(r)).split(/\r\n?|\n/g),E=t({},function(e){for(var r=t({},f),n=0;n<e.length;n++){var i=void 0;(i=l.exec(e[n]))?i[1]in r&&(r[i[1]]=!0,o("Setting options."+i[1]+" to true"),e.splice(n,1),n--):(i=c.exec(e[n]))&&i[1]in r&&(r[i[1]]=i[2],o("Setting options."+i[1]+" to "+i[2]),e.splice(n,1),n--)}return"errors"in r&&"string"==typeof r.errors&&(r.errors=r.errors.split(" ").map(Number),o("Setting options.error to ",r.errors)),r}(w),{},i),b=function(e,r,n){for(var i=t({},r),o=0;o<e.length;){var a=void 0;if(a=l.exec(e[o]))i[a[1]]=!0,s(a[1],"true",i,n);else{if(!(a=c.exec(e[o]))){o++;continue}if("filename"===a[1]){o++;continue}s(a[1],a[2],i,n)}e.splice(o,1)}return i}(w,x,h),S=null!=d?d:function(t){return e.createDefaultMapFromNodeModules(t)}(b),k=e.createSystem(S),j=e.createVirtualTypeScriptEnvironment(k,[],h,b),P=j.languageService;r=w.join("\n");var A=[],F=[],O=[],C=function(e,t){var r=e.split(/\r\n?|\n/g),n=e.includes("@filename: "+t)?"global.ts":t,i=[],o=[],a=r,s=Array.isArray(a),l=0;for(a=s?a:a[Symbol.iterator]();;){var c;if(s){if(l>=a.length)break;c=a[l++]}else{if((l=a.next()).done)break;c=l.value}var f=c;f.includes("// @filename: ")?(o.push([n,i]),n=f.split("// @filename: ")[1].trim(),i=[]):i.push(f)}return o.push([n,i]),o.filter((function(e){return e[1].length>0&&(e[1].length>1||""!==e[1][0])}))}(r,y),T=C.map((function(e){return e[0]})),q=function(){var e,t;if(I){if(D>=L.length)return"break";$=L[D++]}else{if((D=L.next()).done)return"break";$=D.value}var r=$[0],n=$[1],i=n.join("\n");j.createFile(r,i);var o=a(n);(e=O).push.apply(e,o.highlights);var s=o.queries.map((function(e,t){var n,i,o=j.getSourceFile(r),a=h.getPositionOfLineAndCharacter(o,e.line,e.offset);switch(e.kind){case"query":var s=P.getQuickInfoAtPosition(r,a),l=P.getDefinitionAtPosition(r,a),c="Could not get LSP result: "+[(n=j.getSourceFile(r).text)[(i=a)-3],n[i-2],n[i-1],">",n[i],"<",n[i+1],n[i+2],n[i+3]].filter(Boolean).join(""),f=void 0;return s&&l&&s.displayParts&&(c=s.displayParts.map((function(e){return e.text})).join(""),f=s.documentation?s.documentation.map((function(e){return e.text})).join("<br/>"):void 0),{kind:"query",text:c,docs:f,line:e.line-t,offset:e.offset,file:r};case"completion":var u=P.getCompletionsAtPosition(r,a-1,{});if(!u&&!E.noErrorValidation)throw new Error("Twoslash: The ^| query at line "+e.line+" in "+r+" did not return any completions");var p=function(e,t){e=String(e),t=Number(t)>>>0;var r=e.slice(0,t+1).search(/\S+$/),n=e.slice(t).search(/\s/);return n<0?{word:e.slice(r),startPos:r}:{word:e.slice(r,n+t),startPos:r}}(o.text,a-1),d=o.text.slice(p.startPos,a).split(".").pop()||"";return{kind:"completions",completions:(null==u?void 0:u.entries)||[],completionPrefix:d,line:e.line-t,offset:e.offset,file:r}}}));(t=A).push.apply(t,s);var l=n.join("\n");j.updateFile(r,l)},L=C,I=Array.isArray(L),D=0;for(L=I?L:L[Symbol.iterator]();;){var $;if("break"===q())break}var N=r.split(/\r\n?|\n/g);a(N),r=N.join("\n"),E.emit&&T.forEach((function(e){P.getEmitOutput(e).outputFiles.forEach((function(e){k.writeFile(e.name,e.text)}))}));var M=[],U=[];T.forEach((function(e){E.noErrors||(M.push.apply(M,P.getSemanticDiagnostics(e)),M.push.apply(M,P.getSyntacticDiagnostics(e)));var t=j.sys.readFile(e),n=j.getSourceFile(e);if(!n)throw new Error("No sourcefile found for "+e+" in twoslash");if(!E.showEmit){var i=-1==r.indexOf(t)?0:r.indexOf(t),o=r.slice(0,i).split("\n").length-1,a=E.noStaticSemanticInfo?[]:function(e,t){var r=[];return function n(i){e.forEachChild(i,(function(i){if(e.isIdentifier(i)){var o=i.getStart(t,!1);r.push({span:e.createTextSpan(o,i.end-o),text:i.getText(t)})}n(i)}))}(t),r}(h,n),s=Array.isArray(a),l=0;for(a=s?a:a[Symbol.iterator]();;){var c;if(s){if(l>=a.length)break;c=a[l++]}else{if((l=a.next()).done)break;c=l.value}var f=c,u=f.span,p=P.getQuickInfoAtPosition(e,u.start);if(p&&p.displayParts){var d=p.displayParts.map((function(e){return e.text})).join(""),g=f.text,m=p.documentation?p.documentation.map((function(e){return e.text})).join("\n"):void 0,v=u.start+i,y=h.createSourceFile("_.ts",r,h.ScriptTarget.ES2015),x=h.getLineAndCharacterOfPosition(y,v);U.push({text:d,docs:m,start:v,length:u.length,line:x.line,character:x.character,targetString:g})}}A.filter((function(t){return t.file===e})).forEach((function(e){var t=h.getPositionOfLineAndCharacter(n,e.line,e.offset)+i;switch(e.kind){case"query":F.push({docs:e.docs,kind:"query",start:t+i,length:e.text.length,text:e.text,offset:e.offset,line:e.line+o+1});break;case"completions":F.push({completions:e.completions,kind:"completions",start:t+i,completionsPrefix:e.completionPrefix,length:1,offset:e.offset,line:e.line+o+1})}}))}}));var V=M.filter((function(e){return e.file&&T.includes(e.file.fileName)}));!E.noErrorValidation&&V.length&&function(e,t,r,n){var i=e.filter((function(e){return!t.errors.includes(e.code)})),o=i.map((function(e){return e.code})).join(" ");if(i.length){var a="// @errors: "+e.map((function(e){return e.code})).join(" "),s=t.errors.length?" - the annotation specified "+t.errors:"\n\nExpected:\n"+a,l=i.map((function(e){return"["+e.code+"] - "+("string"==typeof e.messageText?e.messageText:e.messageText.messageText)})).join("\n  ");throw new Error("Errors were thrown in the sample, but not included in an errors tag: "+o+s+"\n\n  "+l+"\n\n## Code\n\n'''"+r+"\n"+n+"\n'''")}}(V,E,n,m);var B=[],Q=V,R=Array.isArray(Q),_=0;for(Q=R?Q:Q[Symbol.iterator]();;){var G;if(R){if(_>=Q.length)break;G=Q[_++]}else{if((_=Q.next()).done)break;G=_.value}var Y=G,z=j.sys.readFile(Y.file.fileName),J=r.indexOf(z),H=h.flattenDiagnosticMessageText(Y.messageText,"\n").replace(/</g,"&lt;"),K="err-"+Y.code+"-"+Y.start+"-"+Y.length,W=h.getLineAndCharacterOfPosition(Y.file,Y.start);B.push({category:Y.category,code:Y.code,length:Y.length,start:Y.start?Y.start+J:void 0,line:W.line,character:W.character,renderedMessage:H,id:K})}if(E.showEmit){var X=E.showEmittedFile||y,Z=X.replace(".js","").replace(".d.ts","").replace(".map",""),ee=T.find((function(e){return e===Z+".ts"||e===Z+".tsx"}));if(!ee){var te=T.join(", ");throw new Error("Cannot find the corresponding source file for "+X+" "+E.showEmittedFile+" - in "+te)}var re=P.getEmitOutput(ee),ne=re.outputFiles.find((function(e){return e.name===E.showEmittedFile}));if(!ne){var ie=re.outputFiles.map((function(e){return e.name})).join(", ");throw new Error("Cannot find the file "+E.showEmittedFile+" - in "+ie)}r=ne.text,n=ne.name.split(".").pop(),O=[],A=[],U=[]}var oe="https://www.typescriptlang.org/play/#code/"+g.compressToEncodedURIComponent(m),ae="// ---cut---\n";if(r.includes(ae)){var se=r.indexOf(ae)+ae.length,le=r.substr(0,se).split("\n").length-1;r=r.split(ae).pop(),U.forEach((function(e){e.start-=se,e.line-=le})),U=U.filter((function(e){return e.start>-1})),B.forEach((function(e){e.start&&(e.start-=se),e.line&&(e.line-=le)})),B=B.filter((function(e){return e.start&&e.start>-1})),O.forEach((function(e){e.position-=se,e.line-=le})),O=O.filter((function(e){return e.position>-1})),F.forEach((function(e){return e.line-=le})),F=F.filter((function(e){return e.line>-1}))}return{code:r,extension:n,highlights:O,queries:F,staticQuickInfos:U,errors:B,playgroundURL:oe}};
+Object.defineProperty(exports,"__esModule",{value:!0});var e=__webpack_require__(640);function t(){return(t=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var n in r)Object.prototype.hasOwnProperty.call(r,n)&&(e[n]=r[n])}return e}).apply(this,arguments)}function r(e,t){switch(t){case"number":return+e;case"string":return e;case"boolean":return"true"===e.toLowerCase()||0===e.length}throw new Error("Unknown primitive type "+t+" with - "+e)}var n=!1;try{n="undefined"!=typeof localStorage}catch(e){}var i="undefined"!=typeof process,o=n&&localStorage.getItem("DEBUG")||i&&process.env.DEBUG?console.log:function(e){return""};function a(e){for(var t=[],r=[],n=0,i=0,a=0,s=function(s){var c=e[s],f=function(){i=n,n+=c.length+1},u=function(t){o("Removing line "+s+" for "+t),a++,e.splice(s,1),s--};if(c.includes("//")){var p=/^\/\/\s*\^+( .+)?$/.exec(c),d=/^\/\/\s*\^\?\s*$/.exec(c),h=/^\s*\/\/ prettier-ignore$/.exec(c),g=/^\/\/\s*\^\|$/.exec(c);if(null!==d){var v=c.indexOf("^");r.push({kind:"query",offset:v,text:void 0,docs:void 0,line:s+a-1}),u("having a query")}else if(null!==p){var m=c.indexOf("^"),y=c.lastIndexOf("^")-m+1,x=i+m,w=p[1]?p[1].trim():"";t.push({kind:"highlight",position:x,length:y,description:w,line:s}),u("having a highlight")}else if(null!==h)u("being a prettier ignore");else if(null!==g){var E=c.indexOf("^");r.push({kind:"completion",offset:E,text:void 0,docs:void 0,line:s+a-1}),u("having a completion query")}else f()}else f();l=s},l=0;l<e.length;l++)s(l);return{highlights:t,queries:r}}function s(e,t,n,i){o("Setting "+e+" to "+t);var a=function(){if(l){if(c>=s.length)return"break";f=s[c++]}else{if((c=s.next()).done)return"break";f=c.value}var i=f;if(i.name.toLowerCase()===e.toLowerCase()){switch(i.type){case"number":case"string":case"boolean":n[i.name]=r(t,i.type);break;case"list":n[i.name]=t.split(",").map((function(e){return r(e,i.element.type)}));break;default:var a=i.type;if(n[i.name]=a.get(t.toLowerCase()),o("Set "+i.name+" to "+n[i.name]),void 0===n[i.name]){var u=Array.from(a.keys());throw new Error("Invalid value "+t+" for "+i.name+". Allowed values: "+u.join(","))}}return{v:void 0}}},s=i.optionDeclarations,l=Array.isArray(s),c=0;e:for(s=l?s:s[Symbol.iterator]();;){var f,u=a();switch(u){case"break":break e;default:if("object"==typeof u)return u.v}}throw new Error("No compiler setting named '"+e+"' exists!")}var l=/^\/\/\s?@(\w+)$/,c=/^\/\/\s?@(\w+):\s?(.+)$/,f={errors:[],noErrors:!1,showEmit:!1,showEmittedFile:"index.js",noStaticSemanticInfo:!1,emit:!1,noErrorValidation:!1};exports.twoslasher=function(r,n,i){var u,p,d,h;void 0===i&&(i={});var g=null!==(u=i.tsModule)&&void 0!==u?u:__webpack_require__(34),v=null!==(p=i.lzstringModule)&&void 0!==p?p:__webpack_require__(637),m=r,y=function(e){switch(e){case"js":case"javascript":return"js";case"ts":case"typescript":return"ts";case"tsx":return"tsx";case"jsn":return"json"}throw new Error("Cannot handle the file extension:"+e)}(n),x="index."+y;o("\n\nLooking at code: \n```"+y+"\n"+r+"\n```\n");var w=t({strict:!0,target:g.ScriptTarget.ES2016,allowJs:!0},null!==(d=i.defaultCompilerOptions)&&void 0!==d?d:{});!function(e){if(e.includes("// @errors "))throw new Error("You have '@errors ' - you're missing the colon after errors");if(e.includes("// @filename "))throw new Error("You have '@filename ' - you're missing the colon after filename")}(r);var E=(r=function(e){return(e=e.replace(/¨D/g,"$")).replace(/¨T/g,"~")}(r)).split(/\r\n?|\n/g),b=t({},function(e){for(var r=t({},f),n=0;n<e.length;n++){var i=void 0;(i=l.exec(e[n]))?i[1]in r&&(r[i[1]]=!0,o("Setting options."+i[1]+" to true"),e.splice(n,1),n--):(i=c.exec(e[n]))&&i[1]in r&&(r[i[1]]=i[2],o("Setting options."+i[1]+" to "+i[2]),e.splice(n,1),n--)}return"errors"in r&&"string"==typeof r.errors&&(r.errors=r.errors.split(" ").map(Number),o("Setting options.error to ",r.errors)),r}(E),{},i.defaultOptions),S=function(e,r,n){for(var i=t({},r),o=0;o<e.length;){var a=void 0;if(a=l.exec(e[o]))i[a[1]]=!0,s(a[1],"true",i,n);else{if(!(a=c.exec(e[o]))){o++;continue}if("filename"===a[1]){o++;continue}s(a[1],a[2],i,n)}e.splice(o,1)}return i}(E,w,g),k=null!==(h=i.fsMap)&&void 0!==h?h:function(t,r){return e.createDefaultMapFromNodeModules(t,r)}(S,g),j=e.createSystem(k),P=e.createVirtualTypeScriptEnvironment(j,[],g,S,i.customTransformers),A=P.languageService;r=E.join("\n");var O=[],F=[],C=[],T=function(e,t){var r=e.split(/\r\n?|\n/g),n=e.includes("@filename: "+t)?"global.ts":t,i=[],o=[],a=r,s=Array.isArray(a),l=0;for(a=s?a:a[Symbol.iterator]();;){var c;if(s){if(l>=a.length)break;c=a[l++]}else{if((l=a.next()).done)break;c=l.value}var f=c;f.includes("// @filename: ")?(o.push([n,i]),n=f.split("// @filename: ")[1].trim(),i=[]):i.push(f)}return o.push([n,i]),o.filter((function(e){return e[1].length>0&&(e[1].length>1||""!==e[1][0])}))}(r,x),q=T.map((function(e){return e[0]})),L=function(){var e,t;if(D){if(M>=I.length)return"break";$=I[M++]}else{if((M=I.next()).done)return"break";$=M.value}var r=$[0],n=$[1],i=n.join("\n");P.createFile(r,i);var o=a(n);(e=C).push.apply(e,o.highlights);var s=o.queries.map((function(e,t){var n,i,o=P.getSourceFile(r),a=g.getPositionOfLineAndCharacter(o,e.line,e.offset);switch(e.kind){case"query":var s=A.getQuickInfoAtPosition(r,a),l=A.getDefinitionAtPosition(r,a),c="Could not get LSP result: "+[(n=P.getSourceFile(r).text)[(i=a)-3],n[i-2],n[i-1],">",n[i],"<",n[i+1],n[i+2],n[i+3]].filter(Boolean).join(""),f=void 0;return s&&l&&s.displayParts&&(c=s.displayParts.map((function(e){return e.text})).join(""),f=s.documentation?s.documentation.map((function(e){return e.text})).join("<br/>"):void 0),{kind:"query",text:c,docs:f,line:e.line-t,offset:e.offset,file:r};case"completion":var u=A.getCompletionsAtPosition(r,a-1,{});if(!u&&!b.noErrorValidation)throw new Error("Twoslash: The ^| query at line "+e.line+" in "+r+" did not return any completions");var p=function(e,t){e=String(e),t=Number(t)>>>0;var r=e.slice(0,t+1).search(/\S+$/),n=e.slice(t).search(/\s/);return n<0?{word:e.slice(r),startPos:r}:{word:e.slice(r,n+t),startPos:r}}(o.text,a-1),d=o.text.slice(p.startPos,a).split(".").pop()||"";return{kind:"completions",completions:(null==u?void 0:u.entries)||[],completionPrefix:d,line:e.line-t,offset:e.offset,file:r}}}));(t=O).push.apply(t,s);var l=n.join("\n");P.updateFile(r,l)},I=T,D=Array.isArray(I),M=0;for(I=D?I:I[Symbol.iterator]();;){var $;if("break"===L())break}var N=r.split(/\r\n?|\n/g);a(N),r=N.join("\n"),b.emit&&q.forEach((function(e){A.getEmitOutput(e).outputFiles.forEach((function(e){j.writeFile(e.name,e.text)}))}));var U=[],V=[];q.forEach((function(e){b.noErrors||(U.push.apply(U,A.getSemanticDiagnostics(e)),U.push.apply(U,A.getSyntacticDiagnostics(e)));var t=P.sys.readFile(e),n=P.getSourceFile(e);if(!n)throw new Error("No sourcefile found for "+e+" in twoslash");if(!b.showEmit){var i=-1==r.indexOf(t)?0:r.indexOf(t),o=r.slice(0,i).split("\n").length-1,a=b.noStaticSemanticInfo?[]:function(e,t){var r=[];return function n(i){e.forEachChild(i,(function(i){if(e.isIdentifier(i)){var o=i.getStart(t,!1);r.push({span:e.createTextSpan(o,i.end-o),text:i.getText(t)})}n(i)}))}(t),r}(g,n),s=Array.isArray(a),l=0;for(a=s?a:a[Symbol.iterator]();;){var c;if(s){if(l>=a.length)break;c=a[l++]}else{if((l=a.next()).done)break;c=l.value}var f=c,u=f.span,p=A.getQuickInfoAtPosition(e,u.start);if(p&&p.displayParts){var d=p.displayParts.map((function(e){return e.text})).join(""),h=f.text,v=p.documentation?p.documentation.map((function(e){return e.text})).join("\n"):void 0,m=u.start+i,y=g.createSourceFile("_.ts",r,g.ScriptTarget.ES2015),x=g.getLineAndCharacterOfPosition(y,m);V.push({text:d,docs:v,start:m,length:u.length,line:x.line,character:x.character,targetString:h})}}O.filter((function(t){return t.file===e})).forEach((function(e){var t=g.getPositionOfLineAndCharacter(n,e.line,e.offset)+i;switch(e.kind){case"query":F.push({docs:e.docs,kind:"query",start:t+i,length:e.text.length,text:e.text,offset:e.offset,line:e.line+o+1});break;case"completions":F.push({completions:e.completions,kind:"completions",start:t+i,completionsPrefix:e.completionPrefix,length:1,offset:e.offset,line:e.line+o+1})}}))}}));var B=U.filter((function(e){return e.file&&q.includes(e.file.fileName)}));!b.noErrorValidation&&B.length&&function(e,t,r,n){var i=e.filter((function(e){return!t.errors.includes(e.code)})),o=i.map((function(e){return e.code})).join(" ");if(i.length){var a="// @errors: "+e.map((function(e){return e.code})).join(" "),s=t.errors.length?" - the annotation specified "+t.errors:"\n\nExpected:\n"+a,l=i.map((function(e){return"["+e.code+"] - "+("string"==typeof e.messageText?e.messageText:e.messageText.messageText)})).join("\n  ");throw new Error("Errors were thrown in the sample, but not included in an errors tag: "+o+s+"\n\n  "+l+"\n\n## Code\n\n'''"+r+"\n"+n+"\n'''")}}(B,b,n,m);var Q=[],R=B,_=Array.isArray(R),z=0;for(R=_?R:R[Symbol.iterator]();;){var G;if(_){if(z>=R.length)break;G=R[z++]}else{if((z=R.next()).done)break;G=z.value}var Y=G,J=P.sys.readFile(Y.file.fileName),H=r.indexOf(J),K=g.flattenDiagnosticMessageText(Y.messageText,"\n").replace(/</g,"&lt;"),W="err-"+Y.code+"-"+Y.start+"-"+Y.length,X=g.getLineAndCharacterOfPosition(Y.file,Y.start);Q.push({category:Y.category,code:Y.code,length:Y.length,start:Y.start?Y.start+H:void 0,line:X.line,character:X.character,renderedMessage:K,id:W})}if(b.showEmit){var Z=b.showEmittedFile||x,ee=Z.replace(".js","").replace(".d.ts","").replace(".map",""),te=q.find((function(e){return e===ee+".ts"||e===ee+".tsx"}));if(!te){var re=q.join(", ");throw new Error("Cannot find the corresponding source file for "+Z+" "+b.showEmittedFile+" - in "+re)}var ne=A.getEmitOutput(te),ie=ne.outputFiles.find((function(e){return e.name===b.showEmittedFile}));if(!ie){var oe=ne.outputFiles.map((function(e){return e.name})).join(", ");throw new Error("Cannot find the file "+b.showEmittedFile+" - in "+oe)}r=ie.text,n=ie.name.split(".").pop(),C=[],O=[],V=[]}var ae="https://www.typescriptlang.org/play/#code/"+v.compressToEncodedURIComponent(m),se="// ---cut---\n";if(r.includes(se)){var le=r.indexOf(se)+se.length,ce=r.substr(0,le).split("\n").length-1;r=r.split(se).pop(),V.forEach((function(e){e.start-=le,e.line-=ce})),V=V.filter((function(e){return e.start>-1})),Q.forEach((function(e){e.start&&(e.start-=le),e.line&&(e.line-=ce)})),Q=Q.filter((function(e){return e.start&&e.start>-1})),C.forEach((function(e){e.position-=le,e.line-=ce})),C=C.filter((function(e){return e.position>-1})),F.forEach((function(e){return e.line-=ce})),F=F.filter((function(e){return e.line>-1}))}return{code:r,extension:n,highlights:C,queries:F,staticQuickInfos:V,errors:Q,playgroundURL:ae}};
 //# sourceMappingURL=twoslash.cjs.production.min.js.map
 
 
@@ -2240,35 +2087,1490 @@ exports.Context = Context;
 /***/ }),
 
 /***/ 280:
-/***/ (function(module) {
+/***/ (function(module, exports) {
 
-module.exports = register
+exports = module.exports = SemVer
 
-function register (state, name, method, options) {
-  if (typeof method !== 'function') {
-    throw new Error('method for before hook must be a function')
+var debug
+/* istanbul ignore next */
+if (typeof process === 'object' &&
+    process.env &&
+    process.env.NODE_DEBUG &&
+    /\bsemver\b/i.test(process.env.NODE_DEBUG)) {
+  debug = function () {
+    var args = Array.prototype.slice.call(arguments, 0)
+    args.unshift('SEMVER')
+    console.log.apply(console, args)
+  }
+} else {
+  debug = function () {}
+}
+
+// Note: this is the semver.org version of the spec that it implements
+// Not necessarily the package version of this code.
+exports.SEMVER_SPEC_VERSION = '2.0.0'
+
+var MAX_LENGTH = 256
+var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER ||
+  /* istanbul ignore next */ 9007199254740991
+
+// Max safe segment length for coercion.
+var MAX_SAFE_COMPONENT_LENGTH = 16
+
+// The actual regexps go on exports.re
+var re = exports.re = []
+var src = exports.src = []
+var R = 0
+
+// The following Regular Expressions can be used for tokenizing,
+// validating, and parsing SemVer version strings.
+
+// ## Numeric Identifier
+// A single `0`, or a non-zero digit followed by zero or more digits.
+
+var NUMERICIDENTIFIER = R++
+src[NUMERICIDENTIFIER] = '0|[1-9]\\d*'
+var NUMERICIDENTIFIERLOOSE = R++
+src[NUMERICIDENTIFIERLOOSE] = '[0-9]+'
+
+// ## Non-numeric Identifier
+// Zero or more digits, followed by a letter or hyphen, and then zero or
+// more letters, digits, or hyphens.
+
+var NONNUMERICIDENTIFIER = R++
+src[NONNUMERICIDENTIFIER] = '\\d*[a-zA-Z-][a-zA-Z0-9-]*'
+
+// ## Main Version
+// Three dot-separated numeric identifiers.
+
+var MAINVERSION = R++
+src[MAINVERSION] = '(' + src[NUMERICIDENTIFIER] + ')\\.' +
+                   '(' + src[NUMERICIDENTIFIER] + ')\\.' +
+                   '(' + src[NUMERICIDENTIFIER] + ')'
+
+var MAINVERSIONLOOSE = R++
+src[MAINVERSIONLOOSE] = '(' + src[NUMERICIDENTIFIERLOOSE] + ')\\.' +
+                        '(' + src[NUMERICIDENTIFIERLOOSE] + ')\\.' +
+                        '(' + src[NUMERICIDENTIFIERLOOSE] + ')'
+
+// ## Pre-release Version Identifier
+// A numeric identifier, or a non-numeric identifier.
+
+var PRERELEASEIDENTIFIER = R++
+src[PRERELEASEIDENTIFIER] = '(?:' + src[NUMERICIDENTIFIER] +
+                            '|' + src[NONNUMERICIDENTIFIER] + ')'
+
+var PRERELEASEIDENTIFIERLOOSE = R++
+src[PRERELEASEIDENTIFIERLOOSE] = '(?:' + src[NUMERICIDENTIFIERLOOSE] +
+                                 '|' + src[NONNUMERICIDENTIFIER] + ')'
+
+// ## Pre-release Version
+// Hyphen, followed by one or more dot-separated pre-release version
+// identifiers.
+
+var PRERELEASE = R++
+src[PRERELEASE] = '(?:-(' + src[PRERELEASEIDENTIFIER] +
+                  '(?:\\.' + src[PRERELEASEIDENTIFIER] + ')*))'
+
+var PRERELEASELOOSE = R++
+src[PRERELEASELOOSE] = '(?:-?(' + src[PRERELEASEIDENTIFIERLOOSE] +
+                       '(?:\\.' + src[PRERELEASEIDENTIFIERLOOSE] + ')*))'
+
+// ## Build Metadata Identifier
+// Any combination of digits, letters, or hyphens.
+
+var BUILDIDENTIFIER = R++
+src[BUILDIDENTIFIER] = '[0-9A-Za-z-]+'
+
+// ## Build Metadata
+// Plus sign, followed by one or more period-separated build metadata
+// identifiers.
+
+var BUILD = R++
+src[BUILD] = '(?:\\+(' + src[BUILDIDENTIFIER] +
+             '(?:\\.' + src[BUILDIDENTIFIER] + ')*))'
+
+// ## Full Version String
+// A main version, followed optionally by a pre-release version and
+// build metadata.
+
+// Note that the only major, minor, patch, and pre-release sections of
+// the version string are capturing groups.  The build metadata is not a
+// capturing group, because it should not ever be used in version
+// comparison.
+
+var FULL = R++
+var FULLPLAIN = 'v?' + src[MAINVERSION] +
+                src[PRERELEASE] + '?' +
+                src[BUILD] + '?'
+
+src[FULL] = '^' + FULLPLAIN + '$'
+
+// like full, but allows v1.2.3 and =1.2.3, which people do sometimes.
+// also, 1.0.0alpha1 (prerelease without the hyphen) which is pretty
+// common in the npm registry.
+var LOOSEPLAIN = '[v=\\s]*' + src[MAINVERSIONLOOSE] +
+                 src[PRERELEASELOOSE] + '?' +
+                 src[BUILD] + '?'
+
+var LOOSE = R++
+src[LOOSE] = '^' + LOOSEPLAIN + '$'
+
+var GTLT = R++
+src[GTLT] = '((?:<|>)?=?)'
+
+// Something like "2.*" or "1.2.x".
+// Note that "x.x" is a valid xRange identifer, meaning "any version"
+// Only the first item is strictly required.
+var XRANGEIDENTIFIERLOOSE = R++
+src[XRANGEIDENTIFIERLOOSE] = src[NUMERICIDENTIFIERLOOSE] + '|x|X|\\*'
+var XRANGEIDENTIFIER = R++
+src[XRANGEIDENTIFIER] = src[NUMERICIDENTIFIER] + '|x|X|\\*'
+
+var XRANGEPLAIN = R++
+src[XRANGEPLAIN] = '[v=\\s]*(' + src[XRANGEIDENTIFIER] + ')' +
+                   '(?:\\.(' + src[XRANGEIDENTIFIER] + ')' +
+                   '(?:\\.(' + src[XRANGEIDENTIFIER] + ')' +
+                   '(?:' + src[PRERELEASE] + ')?' +
+                   src[BUILD] + '?' +
+                   ')?)?'
+
+var XRANGEPLAINLOOSE = R++
+src[XRANGEPLAINLOOSE] = '[v=\\s]*(' + src[XRANGEIDENTIFIERLOOSE] + ')' +
+                        '(?:\\.(' + src[XRANGEIDENTIFIERLOOSE] + ')' +
+                        '(?:\\.(' + src[XRANGEIDENTIFIERLOOSE] + ')' +
+                        '(?:' + src[PRERELEASELOOSE] + ')?' +
+                        src[BUILD] + '?' +
+                        ')?)?'
+
+var XRANGE = R++
+src[XRANGE] = '^' + src[GTLT] + '\\s*' + src[XRANGEPLAIN] + '$'
+var XRANGELOOSE = R++
+src[XRANGELOOSE] = '^' + src[GTLT] + '\\s*' + src[XRANGEPLAINLOOSE] + '$'
+
+// Coercion.
+// Extract anything that could conceivably be a part of a valid semver
+var COERCE = R++
+src[COERCE] = '(?:^|[^\\d])' +
+              '(\\d{1,' + MAX_SAFE_COMPONENT_LENGTH + '})' +
+              '(?:\\.(\\d{1,' + MAX_SAFE_COMPONENT_LENGTH + '}))?' +
+              '(?:\\.(\\d{1,' + MAX_SAFE_COMPONENT_LENGTH + '}))?' +
+              '(?:$|[^\\d])'
+
+// Tilde ranges.
+// Meaning is "reasonably at or greater than"
+var LONETILDE = R++
+src[LONETILDE] = '(?:~>?)'
+
+var TILDETRIM = R++
+src[TILDETRIM] = '(\\s*)' + src[LONETILDE] + '\\s+'
+re[TILDETRIM] = new RegExp(src[TILDETRIM], 'g')
+var tildeTrimReplace = '$1~'
+
+var TILDE = R++
+src[TILDE] = '^' + src[LONETILDE] + src[XRANGEPLAIN] + '$'
+var TILDELOOSE = R++
+src[TILDELOOSE] = '^' + src[LONETILDE] + src[XRANGEPLAINLOOSE] + '$'
+
+// Caret ranges.
+// Meaning is "at least and backwards compatible with"
+var LONECARET = R++
+src[LONECARET] = '(?:\\^)'
+
+var CARETTRIM = R++
+src[CARETTRIM] = '(\\s*)' + src[LONECARET] + '\\s+'
+re[CARETTRIM] = new RegExp(src[CARETTRIM], 'g')
+var caretTrimReplace = '$1^'
+
+var CARET = R++
+src[CARET] = '^' + src[LONECARET] + src[XRANGEPLAIN] + '$'
+var CARETLOOSE = R++
+src[CARETLOOSE] = '^' + src[LONECARET] + src[XRANGEPLAINLOOSE] + '$'
+
+// A simple gt/lt/eq thing, or just "" to indicate "any version"
+var COMPARATORLOOSE = R++
+src[COMPARATORLOOSE] = '^' + src[GTLT] + '\\s*(' + LOOSEPLAIN + ')$|^$'
+var COMPARATOR = R++
+src[COMPARATOR] = '^' + src[GTLT] + '\\s*(' + FULLPLAIN + ')$|^$'
+
+// An expression to strip any whitespace between the gtlt and the thing
+// it modifies, so that `> 1.2.3` ==> `>1.2.3`
+var COMPARATORTRIM = R++
+src[COMPARATORTRIM] = '(\\s*)' + src[GTLT] +
+                      '\\s*(' + LOOSEPLAIN + '|' + src[XRANGEPLAIN] + ')'
+
+// this one has to use the /g flag
+re[COMPARATORTRIM] = new RegExp(src[COMPARATORTRIM], 'g')
+var comparatorTrimReplace = '$1$2$3'
+
+// Something like `1.2.3 - 1.2.4`
+// Note that these all use the loose form, because they'll be
+// checked against either the strict or loose comparator form
+// later.
+var HYPHENRANGE = R++
+src[HYPHENRANGE] = '^\\s*(' + src[XRANGEPLAIN] + ')' +
+                   '\\s+-\\s+' +
+                   '(' + src[XRANGEPLAIN] + ')' +
+                   '\\s*$'
+
+var HYPHENRANGELOOSE = R++
+src[HYPHENRANGELOOSE] = '^\\s*(' + src[XRANGEPLAINLOOSE] + ')' +
+                        '\\s+-\\s+' +
+                        '(' + src[XRANGEPLAINLOOSE] + ')' +
+                        '\\s*$'
+
+// Star ranges basically just allow anything at all.
+var STAR = R++
+src[STAR] = '(<|>)?=?\\s*\\*'
+
+// Compile to actual regexp objects.
+// All are flag-free, unless they were created above with a flag.
+for (var i = 0; i < R; i++) {
+  debug(i, src[i])
+  if (!re[i]) {
+    re[i] = new RegExp(src[i])
+  }
+}
+
+exports.parse = parse
+function parse (version, options) {
+  if (!options || typeof options !== 'object') {
+    options = {
+      loose: !!options,
+      includePrerelease: false
+    }
   }
 
-  if (!options) {
-    options = {}
+  if (version instanceof SemVer) {
+    return version
   }
 
-  if (Array.isArray(name)) {
-    return name.reverse().reduce(function (callback, name) {
-      return register.bind(null, state, name, callback, options)
-    }, method)()
+  if (typeof version !== 'string') {
+    return null
   }
 
-  return Promise.resolve()
-    .then(function () {
-      if (!state.registry[name]) {
-        return method(options)
+  if (version.length > MAX_LENGTH) {
+    return null
+  }
+
+  var r = options.loose ? re[LOOSE] : re[FULL]
+  if (!r.test(version)) {
+    return null
+  }
+
+  try {
+    return new SemVer(version, options)
+  } catch (er) {
+    return null
+  }
+}
+
+exports.valid = valid
+function valid (version, options) {
+  var v = parse(version, options)
+  return v ? v.version : null
+}
+
+exports.clean = clean
+function clean (version, options) {
+  var s = parse(version.trim().replace(/^[=v]+/, ''), options)
+  return s ? s.version : null
+}
+
+exports.SemVer = SemVer
+
+function SemVer (version, options) {
+  if (!options || typeof options !== 'object') {
+    options = {
+      loose: !!options,
+      includePrerelease: false
+    }
+  }
+  if (version instanceof SemVer) {
+    if (version.loose === options.loose) {
+      return version
+    } else {
+      version = version.version
+    }
+  } else if (typeof version !== 'string') {
+    throw new TypeError('Invalid Version: ' + version)
+  }
+
+  if (version.length > MAX_LENGTH) {
+    throw new TypeError('version is longer than ' + MAX_LENGTH + ' characters')
+  }
+
+  if (!(this instanceof SemVer)) {
+    return new SemVer(version, options)
+  }
+
+  debug('SemVer', version, options)
+  this.options = options
+  this.loose = !!options.loose
+
+  var m = version.trim().match(options.loose ? re[LOOSE] : re[FULL])
+
+  if (!m) {
+    throw new TypeError('Invalid Version: ' + version)
+  }
+
+  this.raw = version
+
+  // these are actually numbers
+  this.major = +m[1]
+  this.minor = +m[2]
+  this.patch = +m[3]
+
+  if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
+    throw new TypeError('Invalid major version')
+  }
+
+  if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
+    throw new TypeError('Invalid minor version')
+  }
+
+  if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
+    throw new TypeError('Invalid patch version')
+  }
+
+  // numberify any prerelease numeric ids
+  if (!m[4]) {
+    this.prerelease = []
+  } else {
+    this.prerelease = m[4].split('.').map(function (id) {
+      if (/^[0-9]+$/.test(id)) {
+        var num = +id
+        if (num >= 0 && num < MAX_SAFE_INTEGER) {
+          return num
+        }
+      }
+      return id
+    })
+  }
+
+  this.build = m[5] ? m[5].split('.') : []
+  this.format()
+}
+
+SemVer.prototype.format = function () {
+  this.version = this.major + '.' + this.minor + '.' + this.patch
+  if (this.prerelease.length) {
+    this.version += '-' + this.prerelease.join('.')
+  }
+  return this.version
+}
+
+SemVer.prototype.toString = function () {
+  return this.version
+}
+
+SemVer.prototype.compare = function (other) {
+  debug('SemVer.compare', this.version, this.options, other)
+  if (!(other instanceof SemVer)) {
+    other = new SemVer(other, this.options)
+  }
+
+  return this.compareMain(other) || this.comparePre(other)
+}
+
+SemVer.prototype.compareMain = function (other) {
+  if (!(other instanceof SemVer)) {
+    other = new SemVer(other, this.options)
+  }
+
+  return compareIdentifiers(this.major, other.major) ||
+         compareIdentifiers(this.minor, other.minor) ||
+         compareIdentifiers(this.patch, other.patch)
+}
+
+SemVer.prototype.comparePre = function (other) {
+  if (!(other instanceof SemVer)) {
+    other = new SemVer(other, this.options)
+  }
+
+  // NOT having a prerelease is > having one
+  if (this.prerelease.length && !other.prerelease.length) {
+    return -1
+  } else if (!this.prerelease.length && other.prerelease.length) {
+    return 1
+  } else if (!this.prerelease.length && !other.prerelease.length) {
+    return 0
+  }
+
+  var i = 0
+  do {
+    var a = this.prerelease[i]
+    var b = other.prerelease[i]
+    debug('prerelease compare', i, a, b)
+    if (a === undefined && b === undefined) {
+      return 0
+    } else if (b === undefined) {
+      return 1
+    } else if (a === undefined) {
+      return -1
+    } else if (a === b) {
+      continue
+    } else {
+      return compareIdentifiers(a, b)
+    }
+  } while (++i)
+}
+
+// preminor will bump the version up to the next minor release, and immediately
+// down to pre-release. premajor and prepatch work the same way.
+SemVer.prototype.inc = function (release, identifier) {
+  switch (release) {
+    case 'premajor':
+      this.prerelease.length = 0
+      this.patch = 0
+      this.minor = 0
+      this.major++
+      this.inc('pre', identifier)
+      break
+    case 'preminor':
+      this.prerelease.length = 0
+      this.patch = 0
+      this.minor++
+      this.inc('pre', identifier)
+      break
+    case 'prepatch':
+      // If this is already a prerelease, it will bump to the next version
+      // drop any prereleases that might already exist, since they are not
+      // relevant at this point.
+      this.prerelease.length = 0
+      this.inc('patch', identifier)
+      this.inc('pre', identifier)
+      break
+    // If the input is a non-prerelease version, this acts the same as
+    // prepatch.
+    case 'prerelease':
+      if (this.prerelease.length === 0) {
+        this.inc('patch', identifier)
+      }
+      this.inc('pre', identifier)
+      break
+
+    case 'major':
+      // If this is a pre-major version, bump up to the same major version.
+      // Otherwise increment major.
+      // 1.0.0-5 bumps to 1.0.0
+      // 1.1.0 bumps to 2.0.0
+      if (this.minor !== 0 ||
+          this.patch !== 0 ||
+          this.prerelease.length === 0) {
+        this.major++
+      }
+      this.minor = 0
+      this.patch = 0
+      this.prerelease = []
+      break
+    case 'minor':
+      // If this is a pre-minor version, bump up to the same minor version.
+      // Otherwise increment minor.
+      // 1.2.0-5 bumps to 1.2.0
+      // 1.2.1 bumps to 1.3.0
+      if (this.patch !== 0 || this.prerelease.length === 0) {
+        this.minor++
+      }
+      this.patch = 0
+      this.prerelease = []
+      break
+    case 'patch':
+      // If this is not a pre-release version, it will increment the patch.
+      // If it is a pre-release it will bump up to the same patch version.
+      // 1.2.0-5 patches to 1.2.0
+      // 1.2.0 patches to 1.2.1
+      if (this.prerelease.length === 0) {
+        this.patch++
+      }
+      this.prerelease = []
+      break
+    // This probably shouldn't be used publicly.
+    // 1.0.0 "pre" would become 1.0.0-0 which is the wrong direction.
+    case 'pre':
+      if (this.prerelease.length === 0) {
+        this.prerelease = [0]
+      } else {
+        var i = this.prerelease.length
+        while (--i >= 0) {
+          if (typeof this.prerelease[i] === 'number') {
+            this.prerelease[i]++
+            i = -2
+          }
+        }
+        if (i === -1) {
+          // didn't increment anything
+          this.prerelease.push(0)
+        }
+      }
+      if (identifier) {
+        // 1.2.0-beta.1 bumps to 1.2.0-beta.2,
+        // 1.2.0-beta.fooblz or 1.2.0-beta bumps to 1.2.0-beta.0
+        if (this.prerelease[0] === identifier) {
+          if (isNaN(this.prerelease[1])) {
+            this.prerelease = [identifier, 0]
+          }
+        } else {
+          this.prerelease = [identifier, 0]
+        }
+      }
+      break
+
+    default:
+      throw new Error('invalid increment argument: ' + release)
+  }
+  this.format()
+  this.raw = this.version
+  return this
+}
+
+exports.inc = inc
+function inc (version, release, loose, identifier) {
+  if (typeof (loose) === 'string') {
+    identifier = loose
+    loose = undefined
+  }
+
+  try {
+    return new SemVer(version, loose).inc(release, identifier).version
+  } catch (er) {
+    return null
+  }
+}
+
+exports.diff = diff
+function diff (version1, version2) {
+  if (eq(version1, version2)) {
+    return null
+  } else {
+    var v1 = parse(version1)
+    var v2 = parse(version2)
+    var prefix = ''
+    if (v1.prerelease.length || v2.prerelease.length) {
+      prefix = 'pre'
+      var defaultResult = 'prerelease'
+    }
+    for (var key in v1) {
+      if (key === 'major' || key === 'minor' || key === 'patch') {
+        if (v1[key] !== v2[key]) {
+          return prefix + key
+        }
+      }
+    }
+    return defaultResult // may be undefined
+  }
+}
+
+exports.compareIdentifiers = compareIdentifiers
+
+var numeric = /^[0-9]+$/
+function compareIdentifiers (a, b) {
+  var anum = numeric.test(a)
+  var bnum = numeric.test(b)
+
+  if (anum && bnum) {
+    a = +a
+    b = +b
+  }
+
+  return a === b ? 0
+    : (anum && !bnum) ? -1
+    : (bnum && !anum) ? 1
+    : a < b ? -1
+    : 1
+}
+
+exports.rcompareIdentifiers = rcompareIdentifiers
+function rcompareIdentifiers (a, b) {
+  return compareIdentifiers(b, a)
+}
+
+exports.major = major
+function major (a, loose) {
+  return new SemVer(a, loose).major
+}
+
+exports.minor = minor
+function minor (a, loose) {
+  return new SemVer(a, loose).minor
+}
+
+exports.patch = patch
+function patch (a, loose) {
+  return new SemVer(a, loose).patch
+}
+
+exports.compare = compare
+function compare (a, b, loose) {
+  return new SemVer(a, loose).compare(new SemVer(b, loose))
+}
+
+exports.compareLoose = compareLoose
+function compareLoose (a, b) {
+  return compare(a, b, true)
+}
+
+exports.rcompare = rcompare
+function rcompare (a, b, loose) {
+  return compare(b, a, loose)
+}
+
+exports.sort = sort
+function sort (list, loose) {
+  return list.sort(function (a, b) {
+    return exports.compare(a, b, loose)
+  })
+}
+
+exports.rsort = rsort
+function rsort (list, loose) {
+  return list.sort(function (a, b) {
+    return exports.rcompare(a, b, loose)
+  })
+}
+
+exports.gt = gt
+function gt (a, b, loose) {
+  return compare(a, b, loose) > 0
+}
+
+exports.lt = lt
+function lt (a, b, loose) {
+  return compare(a, b, loose) < 0
+}
+
+exports.eq = eq
+function eq (a, b, loose) {
+  return compare(a, b, loose) === 0
+}
+
+exports.neq = neq
+function neq (a, b, loose) {
+  return compare(a, b, loose) !== 0
+}
+
+exports.gte = gte
+function gte (a, b, loose) {
+  return compare(a, b, loose) >= 0
+}
+
+exports.lte = lte
+function lte (a, b, loose) {
+  return compare(a, b, loose) <= 0
+}
+
+exports.cmp = cmp
+function cmp (a, op, b, loose) {
+  switch (op) {
+    case '===':
+      if (typeof a === 'object')
+        a = a.version
+      if (typeof b === 'object')
+        b = b.version
+      return a === b
+
+    case '!==':
+      if (typeof a === 'object')
+        a = a.version
+      if (typeof b === 'object')
+        b = b.version
+      return a !== b
+
+    case '':
+    case '=':
+    case '==':
+      return eq(a, b, loose)
+
+    case '!=':
+      return neq(a, b, loose)
+
+    case '>':
+      return gt(a, b, loose)
+
+    case '>=':
+      return gte(a, b, loose)
+
+    case '<':
+      return lt(a, b, loose)
+
+    case '<=':
+      return lte(a, b, loose)
+
+    default:
+      throw new TypeError('Invalid operator: ' + op)
+  }
+}
+
+exports.Comparator = Comparator
+function Comparator (comp, options) {
+  if (!options || typeof options !== 'object') {
+    options = {
+      loose: !!options,
+      includePrerelease: false
+    }
+  }
+
+  if (comp instanceof Comparator) {
+    if (comp.loose === !!options.loose) {
+      return comp
+    } else {
+      comp = comp.value
+    }
+  }
+
+  if (!(this instanceof Comparator)) {
+    return new Comparator(comp, options)
+  }
+
+  debug('comparator', comp, options)
+  this.options = options
+  this.loose = !!options.loose
+  this.parse(comp)
+
+  if (this.semver === ANY) {
+    this.value = ''
+  } else {
+    this.value = this.operator + this.semver.version
+  }
+
+  debug('comp', this)
+}
+
+var ANY = {}
+Comparator.prototype.parse = function (comp) {
+  var r = this.options.loose ? re[COMPARATORLOOSE] : re[COMPARATOR]
+  var m = comp.match(r)
+
+  if (!m) {
+    throw new TypeError('Invalid comparator: ' + comp)
+  }
+
+  this.operator = m[1]
+  if (this.operator === '=') {
+    this.operator = ''
+  }
+
+  // if it literally is just '>' or '' then allow anything.
+  if (!m[2]) {
+    this.semver = ANY
+  } else {
+    this.semver = new SemVer(m[2], this.options.loose)
+  }
+}
+
+Comparator.prototype.toString = function () {
+  return this.value
+}
+
+Comparator.prototype.test = function (version) {
+  debug('Comparator.test', version, this.options.loose)
+
+  if (this.semver === ANY) {
+    return true
+  }
+
+  if (typeof version === 'string') {
+    version = new SemVer(version, this.options)
+  }
+
+  return cmp(version, this.operator, this.semver, this.options)
+}
+
+Comparator.prototype.intersects = function (comp, options) {
+  if (!(comp instanceof Comparator)) {
+    throw new TypeError('a Comparator is required')
+  }
+
+  if (!options || typeof options !== 'object') {
+    options = {
+      loose: !!options,
+      includePrerelease: false
+    }
+  }
+
+  var rangeTmp
+
+  if (this.operator === '') {
+    rangeTmp = new Range(comp.value, options)
+    return satisfies(this.value, rangeTmp, options)
+  } else if (comp.operator === '') {
+    rangeTmp = new Range(this.value, options)
+    return satisfies(comp.semver, rangeTmp, options)
+  }
+
+  var sameDirectionIncreasing =
+    (this.operator === '>=' || this.operator === '>') &&
+    (comp.operator === '>=' || comp.operator === '>')
+  var sameDirectionDecreasing =
+    (this.operator === '<=' || this.operator === '<') &&
+    (comp.operator === '<=' || comp.operator === '<')
+  var sameSemVer = this.semver.version === comp.semver.version
+  var differentDirectionsInclusive =
+    (this.operator === '>=' || this.operator === '<=') &&
+    (comp.operator === '>=' || comp.operator === '<=')
+  var oppositeDirectionsLessThan =
+    cmp(this.semver, '<', comp.semver, options) &&
+    ((this.operator === '>=' || this.operator === '>') &&
+    (comp.operator === '<=' || comp.operator === '<'))
+  var oppositeDirectionsGreaterThan =
+    cmp(this.semver, '>', comp.semver, options) &&
+    ((this.operator === '<=' || this.operator === '<') &&
+    (comp.operator === '>=' || comp.operator === '>'))
+
+  return sameDirectionIncreasing || sameDirectionDecreasing ||
+    (sameSemVer && differentDirectionsInclusive) ||
+    oppositeDirectionsLessThan || oppositeDirectionsGreaterThan
+}
+
+exports.Range = Range
+function Range (range, options) {
+  if (!options || typeof options !== 'object') {
+    options = {
+      loose: !!options,
+      includePrerelease: false
+    }
+  }
+
+  if (range instanceof Range) {
+    if (range.loose === !!options.loose &&
+        range.includePrerelease === !!options.includePrerelease) {
+      return range
+    } else {
+      return new Range(range.raw, options)
+    }
+  }
+
+  if (range instanceof Comparator) {
+    return new Range(range.value, options)
+  }
+
+  if (!(this instanceof Range)) {
+    return new Range(range, options)
+  }
+
+  this.options = options
+  this.loose = !!options.loose
+  this.includePrerelease = !!options.includePrerelease
+
+  // First, split based on boolean or ||
+  this.raw = range
+  this.set = range.split(/\s*\|\|\s*/).map(function (range) {
+    return this.parseRange(range.trim())
+  }, this).filter(function (c) {
+    // throw out any that are not relevant for whatever reason
+    return c.length
+  })
+
+  if (!this.set.length) {
+    throw new TypeError('Invalid SemVer Range: ' + range)
+  }
+
+  this.format()
+}
+
+Range.prototype.format = function () {
+  this.range = this.set.map(function (comps) {
+    return comps.join(' ').trim()
+  }).join('||').trim()
+  return this.range
+}
+
+Range.prototype.toString = function () {
+  return this.range
+}
+
+Range.prototype.parseRange = function (range) {
+  var loose = this.options.loose
+  range = range.trim()
+  // `1.2.3 - 1.2.4` => `>=1.2.3 <=1.2.4`
+  var hr = loose ? re[HYPHENRANGELOOSE] : re[HYPHENRANGE]
+  range = range.replace(hr, hyphenReplace)
+  debug('hyphen replace', range)
+  // `> 1.2.3 < 1.2.5` => `>1.2.3 <1.2.5`
+  range = range.replace(re[COMPARATORTRIM], comparatorTrimReplace)
+  debug('comparator trim', range, re[COMPARATORTRIM])
+
+  // `~ 1.2.3` => `~1.2.3`
+  range = range.replace(re[TILDETRIM], tildeTrimReplace)
+
+  // `^ 1.2.3` => `^1.2.3`
+  range = range.replace(re[CARETTRIM], caretTrimReplace)
+
+  // normalize spaces
+  range = range.split(/\s+/).join(' ')
+
+  // At this point, the range is completely trimmed and
+  // ready to be split into comparators.
+
+  var compRe = loose ? re[COMPARATORLOOSE] : re[COMPARATOR]
+  var set = range.split(' ').map(function (comp) {
+    return parseComparator(comp, this.options)
+  }, this).join(' ').split(/\s+/)
+  if (this.options.loose) {
+    // in loose mode, throw out any that are not valid comparators
+    set = set.filter(function (comp) {
+      return !!comp.match(compRe)
+    })
+  }
+  set = set.map(function (comp) {
+    return new Comparator(comp, this.options)
+  }, this)
+
+  return set
+}
+
+Range.prototype.intersects = function (range, options) {
+  if (!(range instanceof Range)) {
+    throw new TypeError('a Range is required')
+  }
+
+  return this.set.some(function (thisComparators) {
+    return thisComparators.every(function (thisComparator) {
+      return range.set.some(function (rangeComparators) {
+        return rangeComparators.every(function (rangeComparator) {
+          return thisComparator.intersects(rangeComparator, options)
+        })
+      })
+    })
+  })
+}
+
+// Mostly just for testing and legacy API reasons
+exports.toComparators = toComparators
+function toComparators (range, options) {
+  return new Range(range, options).set.map(function (comp) {
+    return comp.map(function (c) {
+      return c.value
+    }).join(' ').trim().split(' ')
+  })
+}
+
+// comprised of xranges, tildes, stars, and gtlt's at this point.
+// already replaced the hyphen ranges
+// turn into a set of JUST comparators.
+function parseComparator (comp, options) {
+  debug('comp', comp, options)
+  comp = replaceCarets(comp, options)
+  debug('caret', comp)
+  comp = replaceTildes(comp, options)
+  debug('tildes', comp)
+  comp = replaceXRanges(comp, options)
+  debug('xrange', comp)
+  comp = replaceStars(comp, options)
+  debug('stars', comp)
+  return comp
+}
+
+function isX (id) {
+  return !id || id.toLowerCase() === 'x' || id === '*'
+}
+
+// ~, ~> --> * (any, kinda silly)
+// ~2, ~2.x, ~2.x.x, ~>2, ~>2.x ~>2.x.x --> >=2.0.0 <3.0.0
+// ~2.0, ~2.0.x, ~>2.0, ~>2.0.x --> >=2.0.0 <2.1.0
+// ~1.2, ~1.2.x, ~>1.2, ~>1.2.x --> >=1.2.0 <1.3.0
+// ~1.2.3, ~>1.2.3 --> >=1.2.3 <1.3.0
+// ~1.2.0, ~>1.2.0 --> >=1.2.0 <1.3.0
+function replaceTildes (comp, options) {
+  return comp.trim().split(/\s+/).map(function (comp) {
+    return replaceTilde(comp, options)
+  }).join(' ')
+}
+
+function replaceTilde (comp, options) {
+  var r = options.loose ? re[TILDELOOSE] : re[TILDE]
+  return comp.replace(r, function (_, M, m, p, pr) {
+    debug('tilde', comp, _, M, m, p, pr)
+    var ret
+
+    if (isX(M)) {
+      ret = ''
+    } else if (isX(m)) {
+      ret = '>=' + M + '.0.0 <' + (+M + 1) + '.0.0'
+    } else if (isX(p)) {
+      // ~1.2 == >=1.2.0 <1.3.0
+      ret = '>=' + M + '.' + m + '.0 <' + M + '.' + (+m + 1) + '.0'
+    } else if (pr) {
+      debug('replaceTilde pr', pr)
+      ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
+            ' <' + M + '.' + (+m + 1) + '.0'
+    } else {
+      // ~1.2.3 == >=1.2.3 <1.3.0
+      ret = '>=' + M + '.' + m + '.' + p +
+            ' <' + M + '.' + (+m + 1) + '.0'
+    }
+
+    debug('tilde return', ret)
+    return ret
+  })
+}
+
+// ^ --> * (any, kinda silly)
+// ^2, ^2.x, ^2.x.x --> >=2.0.0 <3.0.0
+// ^2.0, ^2.0.x --> >=2.0.0 <3.0.0
+// ^1.2, ^1.2.x --> >=1.2.0 <2.0.0
+// ^1.2.3 --> >=1.2.3 <2.0.0
+// ^1.2.0 --> >=1.2.0 <2.0.0
+function replaceCarets (comp, options) {
+  return comp.trim().split(/\s+/).map(function (comp) {
+    return replaceCaret(comp, options)
+  }).join(' ')
+}
+
+function replaceCaret (comp, options) {
+  debug('caret', comp, options)
+  var r = options.loose ? re[CARETLOOSE] : re[CARET]
+  return comp.replace(r, function (_, M, m, p, pr) {
+    debug('caret', comp, _, M, m, p, pr)
+    var ret
+
+    if (isX(M)) {
+      ret = ''
+    } else if (isX(m)) {
+      ret = '>=' + M + '.0.0 <' + (+M + 1) + '.0.0'
+    } else if (isX(p)) {
+      if (M === '0') {
+        ret = '>=' + M + '.' + m + '.0 <' + M + '.' + (+m + 1) + '.0'
+      } else {
+        ret = '>=' + M + '.' + m + '.0 <' + (+M + 1) + '.0.0'
+      }
+    } else if (pr) {
+      debug('replaceCaret pr', pr)
+      if (M === '0') {
+        if (m === '0') {
+          ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
+                ' <' + M + '.' + m + '.' + (+p + 1)
+        } else {
+          ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
+                ' <' + M + '.' + (+m + 1) + '.0'
+        }
+      } else {
+        ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
+              ' <' + (+M + 1) + '.0.0'
+      }
+    } else {
+      debug('no pr')
+      if (M === '0') {
+        if (m === '0') {
+          ret = '>=' + M + '.' + m + '.' + p +
+                ' <' + M + '.' + m + '.' + (+p + 1)
+        } else {
+          ret = '>=' + M + '.' + m + '.' + p +
+                ' <' + M + '.' + (+m + 1) + '.0'
+        }
+      } else {
+        ret = '>=' + M + '.' + m + '.' + p +
+              ' <' + (+M + 1) + '.0.0'
+      }
+    }
+
+    debug('caret return', ret)
+    return ret
+  })
+}
+
+function replaceXRanges (comp, options) {
+  debug('replaceXRanges', comp, options)
+  return comp.split(/\s+/).map(function (comp) {
+    return replaceXRange(comp, options)
+  }).join(' ')
+}
+
+function replaceXRange (comp, options) {
+  comp = comp.trim()
+  var r = options.loose ? re[XRANGELOOSE] : re[XRANGE]
+  return comp.replace(r, function (ret, gtlt, M, m, p, pr) {
+    debug('xRange', comp, ret, gtlt, M, m, p, pr)
+    var xM = isX(M)
+    var xm = xM || isX(m)
+    var xp = xm || isX(p)
+    var anyX = xp
+
+    if (gtlt === '=' && anyX) {
+      gtlt = ''
+    }
+
+    if (xM) {
+      if (gtlt === '>' || gtlt === '<') {
+        // nothing is allowed
+        ret = '<0.0.0'
+      } else {
+        // nothing is forbidden
+        ret = '*'
+      }
+    } else if (gtlt && anyX) {
+      // we know patch is an x, because we have any x at all.
+      // replace X with 0
+      if (xm) {
+        m = 0
+      }
+      p = 0
+
+      if (gtlt === '>') {
+        // >1 => >=2.0.0
+        // >1.2 => >=1.3.0
+        // >1.2.3 => >= 1.2.4
+        gtlt = '>='
+        if (xm) {
+          M = +M + 1
+          m = 0
+          p = 0
+        } else {
+          m = +m + 1
+          p = 0
+        }
+      } else if (gtlt === '<=') {
+        // <=0.7.x is actually <0.8.0, since any 0.7.x should
+        // pass.  Similarly, <=7.x is actually <8.0.0, etc.
+        gtlt = '<'
+        if (xm) {
+          M = +M + 1
+        } else {
+          m = +m + 1
+        }
       }
 
-      return (state.registry[name]).reduce(function (method, registered) {
-        return registered.hook.bind(null, method, options)
-      }, method)()
+      ret = gtlt + M + '.' + m + '.' + p
+    } else if (xm) {
+      ret = '>=' + M + '.0.0 <' + (+M + 1) + '.0.0'
+    } else if (xp) {
+      ret = '>=' + M + '.' + m + '.0 <' + M + '.' + (+m + 1) + '.0'
+    }
+
+    debug('xRange return', ret)
+
+    return ret
+  })
+}
+
+// Because * is AND-ed with everything else in the comparator,
+// and '' means "any version", just remove the *s entirely.
+function replaceStars (comp, options) {
+  debug('replaceStars', comp, options)
+  // Looseness is ignored here.  star is always as loose as it gets!
+  return comp.trim().replace(re[STAR], '')
+}
+
+// This function is passed to string.replace(re[HYPHENRANGE])
+// M, m, patch, prerelease, build
+// 1.2 - 3.4.5 => >=1.2.0 <=3.4.5
+// 1.2.3 - 3.4 => >=1.2.0 <3.5.0 Any 3.4.x will do
+// 1.2 - 3.4 => >=1.2.0 <3.5.0
+function hyphenReplace ($0,
+  from, fM, fm, fp, fpr, fb,
+  to, tM, tm, tp, tpr, tb) {
+  if (isX(fM)) {
+    from = ''
+  } else if (isX(fm)) {
+    from = '>=' + fM + '.0.0'
+  } else if (isX(fp)) {
+    from = '>=' + fM + '.' + fm + '.0'
+  } else {
+    from = '>=' + from
+  }
+
+  if (isX(tM)) {
+    to = ''
+  } else if (isX(tm)) {
+    to = '<' + (+tM + 1) + '.0.0'
+  } else if (isX(tp)) {
+    to = '<' + tM + '.' + (+tm + 1) + '.0'
+  } else if (tpr) {
+    to = '<=' + tM + '.' + tm + '.' + tp + '-' + tpr
+  } else {
+    to = '<=' + to
+  }
+
+  return (from + ' ' + to).trim()
+}
+
+// if ANY of the sets match ALL of its comparators, then pass
+Range.prototype.test = function (version) {
+  if (!version) {
+    return false
+  }
+
+  if (typeof version === 'string') {
+    version = new SemVer(version, this.options)
+  }
+
+  for (var i = 0; i < this.set.length; i++) {
+    if (testSet(this.set[i], version, this.options)) {
+      return true
+    }
+  }
+  return false
+}
+
+function testSet (set, version, options) {
+  for (var i = 0; i < set.length; i++) {
+    if (!set[i].test(version)) {
+      return false
+    }
+  }
+
+  if (version.prerelease.length && !options.includePrerelease) {
+    // Find the set of versions that are allowed to have prereleases
+    // For example, ^1.2.3-pr.1 desugars to >=1.2.3-pr.1 <2.0.0
+    // That should allow `1.2.3-pr.2` to pass.
+    // However, `1.2.4-alpha.notready` should NOT be allowed,
+    // even though it's within the range set by the comparators.
+    for (i = 0; i < set.length; i++) {
+      debug(set[i].semver)
+      if (set[i].semver === ANY) {
+        continue
+      }
+
+      if (set[i].semver.prerelease.length > 0) {
+        var allowed = set[i].semver
+        if (allowed.major === version.major &&
+            allowed.minor === version.minor &&
+            allowed.patch === version.patch) {
+          return true
+        }
+      }
+    }
+
+    // Version has a -pre, but it's not one of the ones we like.
+    return false
+  }
+
+  return true
+}
+
+exports.satisfies = satisfies
+function satisfies (version, range, options) {
+  try {
+    range = new Range(range, options)
+  } catch (er) {
+    return false
+  }
+  return range.test(version)
+}
+
+exports.maxSatisfying = maxSatisfying
+function maxSatisfying (versions, range, options) {
+  var max = null
+  var maxSV = null
+  try {
+    var rangeObj = new Range(range, options)
+  } catch (er) {
+    return null
+  }
+  versions.forEach(function (v) {
+    if (rangeObj.test(v)) {
+      // satisfies(v, range, options)
+      if (!max || maxSV.compare(v) === -1) {
+        // compare(max, v, true)
+        max = v
+        maxSV = new SemVer(max, options)
+      }
+    }
+  })
+  return max
+}
+
+exports.minSatisfying = minSatisfying
+function minSatisfying (versions, range, options) {
+  var min = null
+  var minSV = null
+  try {
+    var rangeObj = new Range(range, options)
+  } catch (er) {
+    return null
+  }
+  versions.forEach(function (v) {
+    if (rangeObj.test(v)) {
+      // satisfies(v, range, options)
+      if (!min || minSV.compare(v) === 1) {
+        // compare(min, v, true)
+        min = v
+        minSV = new SemVer(min, options)
+      }
+    }
+  })
+  return min
+}
+
+exports.minVersion = minVersion
+function minVersion (range, loose) {
+  range = new Range(range, loose)
+
+  var minver = new SemVer('0.0.0')
+  if (range.test(minver)) {
+    return minver
+  }
+
+  minver = new SemVer('0.0.0-0')
+  if (range.test(minver)) {
+    return minver
+  }
+
+  minver = null
+  for (var i = 0; i < range.set.length; ++i) {
+    var comparators = range.set[i]
+
+    comparators.forEach(function (comparator) {
+      // Clone to avoid manipulating the comparator's semver object.
+      var compver = new SemVer(comparator.semver.version)
+      switch (comparator.operator) {
+        case '>':
+          if (compver.prerelease.length === 0) {
+            compver.patch++
+          } else {
+            compver.prerelease.push(0)
+          }
+          compver.raw = compver.format()
+          /* fallthrough */
+        case '':
+        case '>=':
+          if (!minver || gt(minver, compver)) {
+            minver = compver
+          }
+          break
+        case '<':
+        case '<=':
+          /* Ignore maximum versions */
+          break
+        /* istanbul ignore next */
+        default:
+          throw new Error('Unexpected operation: ' + comparator.operator)
+      }
     })
+  }
+
+  if (minver && range.test(minver)) {
+    return minver
+  }
+
+  return null
+}
+
+exports.validRange = validRange
+function validRange (range, options) {
+  try {
+    // Return '*' instead of '' so that truthiness works.
+    // This will throw if it's invalid anyway
+    return new Range(range, options).range || '*'
+  } catch (er) {
+    return null
+  }
+}
+
+// Determine if version is less than all the versions possible in the range
+exports.ltr = ltr
+function ltr (version, range, options) {
+  return outside(version, range, '<', options)
+}
+
+// Determine if version is greater than all the versions possible in the range.
+exports.gtr = gtr
+function gtr (version, range, options) {
+  return outside(version, range, '>', options)
+}
+
+exports.outside = outside
+function outside (version, range, hilo, options) {
+  version = new SemVer(version, options)
+  range = new Range(range, options)
+
+  var gtfn, ltefn, ltfn, comp, ecomp
+  switch (hilo) {
+    case '>':
+      gtfn = gt
+      ltefn = lte
+      ltfn = lt
+      comp = '>'
+      ecomp = '>='
+      break
+    case '<':
+      gtfn = lt
+      ltefn = gte
+      ltfn = gt
+      comp = '<'
+      ecomp = '<='
+      break
+    default:
+      throw new TypeError('Must provide a hilo val of "<" or ">"')
+  }
+
+  // If it satisifes the range it is not outside
+  if (satisfies(version, range, options)) {
+    return false
+  }
+
+  // From now on, variable terms are as if we're in "gtr" mode.
+  // but note that everything is flipped for the "ltr" function.
+
+  for (var i = 0; i < range.set.length; ++i) {
+    var comparators = range.set[i]
+
+    var high = null
+    var low = null
+
+    comparators.forEach(function (comparator) {
+      if (comparator.semver === ANY) {
+        comparator = new Comparator('>=0.0.0')
+      }
+      high = high || comparator
+      low = low || comparator
+      if (gtfn(comparator.semver, high.semver, options)) {
+        high = comparator
+      } else if (ltfn(comparator.semver, low.semver, options)) {
+        low = comparator
+      }
+    })
+
+    // If the edge version comparator has a operator then our version
+    // isn't outside it
+    if (high.operator === comp || high.operator === ecomp) {
+      return false
+    }
+
+    // If the lowest version comparator has an operator and our version
+    // is less than it then it isn't higher than the range
+    if ((!low.operator || low.operator === comp) &&
+        ltefn(version, low.semver)) {
+      return false
+    } else if (low.operator === ecomp && ltfn(version, low.semver)) {
+      return false
+    }
+  }
+  return true
+}
+
+exports.prerelease = prerelease
+function prerelease (version, options) {
+  var parsed = parse(version, options)
+  return (parsed && parsed.prerelease.length) ? parsed.prerelease : null
+}
+
+exports.intersects = intersects
+function intersects (r1, r2, options) {
+  r1 = new Range(r1, options)
+  r2 = new Range(r2, options)
+  return r1.intersects(r2)
+}
+
+exports.coerce = coerce
+function coerce (version) {
+  if (version instanceof SemVer) {
+    return version
+  }
+
+  if (typeof version !== 'string') {
+    return null
+  }
+
+  var match = version.match(re[COERCE])
+
+  if (match == null) {
+    return null
+  }
+
+  return parse(match[1] +
+    '.' + (match[2] || '0') +
+    '.' + (match[3] || '0'))
 }
 
 
@@ -2456,13 +3758,10 @@ exports.runTwoSlash = (label) => (run, ts) => {
     // TypeScript dep needs to be looked up by the workflow define parts of the FS first
     const typeScripts = ['/home/runner/work/TypeScript/TypeScript/node_modules/typescript'];
     const t = typeScripts.find(tpath => fs_1.existsSync(tpath)) || 'typescript';
-    console.log(t);
-    console.log(fs_1.readdirSync('/home/runner/work/TypeScript/TypeScript'));
-    console.log(fs_1.readdirSync('/home/runner/work/TypeScript/TypeScript/node_modules'));
     const tsModule = ts || require(t);
     try {
         const opts = { noErrorValidation: true, noStaticSemanticInfo: true };
-        result = twoslash_1.twoslasher(run.block.content, run.block.lang, opts, tsModule);
+        result = twoslash_1.twoslasher(run.block.content, run.block.lang, { defaultOptions: opts, tsModule });
     }
     catch (error) {
         return {
@@ -2497,46 +3796,6 @@ exports.runTwoSlash = (label) => (run, ts) => {
         delete returnResults['emit'];
     return returnResults;
 };
-
-
-/***/ }),
-
-/***/ 306:
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-const fs = __webpack_require__(747);
-const shebangCommand = __webpack_require__(907);
-
-function readShebang(command) {
-    // Read the first 150 bytes from the file
-    const size = 150;
-    let buffer;
-
-    if (Buffer.alloc) {
-        // Node.js v4.5+ / v5.10+
-        buffer = Buffer.alloc(size);
-    } else {
-        // Old Node.js API
-        buffer = new Buffer(size);
-        buffer.fill(0); // zero-fill
-    }
-
-    let fd;
-
-    try {
-        fd = fs.openSync(command, 'r');
-        fs.readSync(fd, buffer, 0, size, 0);
-        fs.closeSync(fd);
-    } catch (e) { /* Empty */ }
-
-    // Attempt to extract shebang (null is returned if not a shebang)
-    return shebangCommand(buffer.toString());
-}
-
-module.exports = readShebang;
 
 
 /***/ }),
@@ -2608,6 +3867,41 @@ isStream.transform = function (stream) {
 /***/ (function(module) {
 
 module.exports = require("assert");
+
+/***/ }),
+
+/***/ 363:
+/***/ (function(module) {
+
+module.exports = register
+
+function register (state, name, method, options) {
+  if (typeof method !== 'function') {
+    throw new Error('method for before hook must be a function')
+  }
+
+  if (!options) {
+    options = {}
+  }
+
+  if (Array.isArray(name)) {
+    return name.reverse().reduce(function (callback, name) {
+      return register.bind(null, state, name, callback, options)
+    }, method)()
+  }
+
+  return Promise.resolve()
+    .then(function () {
+      if (!state.registry[name]) {
+        return method(options)
+      }
+
+      return (state.registry[name]).reduce(function (method, registered) {
+        return registered.hook.bind(null, method, options)
+      }, method)()
+    })
+}
+
 
 /***/ }),
 
@@ -2998,6 +4292,46 @@ exports.endpoint = endpoint;
 
 /***/ }),
 
+/***/ 389:
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+const fs = __webpack_require__(747);
+const shebangCommand = __webpack_require__(866);
+
+function readShebang(command) {
+    // Read the first 150 bytes from the file
+    const size = 150;
+    let buffer;
+
+    if (Buffer.alloc) {
+        // Node.js v4.5+ / v5.10+
+        buffer = Buffer.alloc(size);
+    } else {
+        // Old Node.js API
+        buffer = new Buffer(size);
+        buffer.fill(0); // zero-fill
+    }
+
+    let fd;
+
+    try {
+        fd = fs.openSync(command, 'r');
+        fs.readSync(fd, buffer, 0, size, 0);
+        fs.closeSync(fd);
+    } catch (e) { /* Empty */ }
+
+    // Attempt to extract shebang (null is returned if not a shebang)
+    return shebangCommand(buffer.toString());
+}
+
+module.exports = readShebang;
+
+
+/***/ }),
+
 /***/ 397:
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -3024,7 +4358,12 @@ function _extends() {
   return _extends.apply(this, arguments);
 }
 
-var hasLocalStorage = typeof localStorage !== "undefined";
+var hasLocalStorage = false;
+
+try {
+  hasLocalStorage = typeof localStorage !== "undefined";
+} catch (error) {}
+
 var hasProcess = typeof process !== "undefined";
 var shouldDebug = hasLocalStorage &&
 /*#__PURE__*/
@@ -3040,16 +4379,17 @@ var debugLog = shouldDebug ? console.log : function (_message) {
  * @param rootFiles a list of files which are considered inside the project
  * @param ts a copy pf the TypeScript module
  * @param compilerOptions the options for this compiler run
+ * @param customTransformers custom transformers for this compiler run
  */
 
-function createVirtualTypeScriptEnvironment(sys, rootFiles, ts, compilerOptions) {
+function createVirtualTypeScriptEnvironment(sys, rootFiles, ts, compilerOptions, customTransformers) {
   if (compilerOptions === void 0) {
     compilerOptions = {};
   }
 
   var mergedCompilerOpts = _extends({}, defaultCompilerOptions(ts), {}, compilerOptions);
 
-  var _createVirtualLanguag = createVirtualLanguageServiceHost(sys, rootFiles, mergedCompilerOpts, ts),
+  var _createVirtualLanguag = createVirtualLanguageServiceHost(sys, rootFiles, mergedCompilerOpts, ts, customTransformers),
       languageServiceHost = _createVirtualLanguag.languageServiceHost,
       _updateFile = _createVirtualLanguag.updateFile;
 
@@ -3074,6 +4414,11 @@ function createVirtualTypeScriptEnvironment(sys, rootFiles, ts, compilerOptions)
     },
     updateFile: function updateFile(fileName, content, optPrevTextSpan) {
       var prevSourceFile = languageService.getProgram().getSourceFile(fileName);
+
+      if (!prevSourceFile) {
+        throw new Error("Did not find a source file for " + fileName);
+      }
+
       var prevFullContents = prevSourceFile.text; // TODO: Validate if the default text span has a fencepost error?
 
       var prevTextSpan = optPrevTextSpan !== null && optPrevTextSpan !== void 0 ? optPrevTextSpan : ts.createTextSpan(0, prevFullContents.length);
@@ -3129,8 +4474,8 @@ var knownLibFilesForCompilerOptions = function knownLibFilesForCompilerOptions(c
  * the local copy of typescript via the file system.
  */
 
-var createDefaultMapFromNodeModules = function createDefaultMapFromNodeModules(compilerOptions) {
-  var ts = __webpack_require__(34);
+var createDefaultMapFromNodeModules = function createDefaultMapFromNodeModules(compilerOptions, ts) {
+  var tsModule = ts || __webpack_require__(34);
 
   var path = __webpack_require__(622);
 
@@ -3141,7 +4486,7 @@ var createDefaultMapFromNodeModules = function createDefaultMapFromNodeModules(c
     return fs.readFileSync(__webpack_require__.ab + "lib/" + name, "utf8");
   };
 
-  var libs = knownLibFilesForCompilerOptions(compilerOptions, ts);
+  var libs = knownLibFilesForCompilerOptions(compilerOptions, tsModule);
   var fsMap = new Map();
   libs.forEach(function (lib) {
     fsMap.set("/" + lib, getLib(lib));
@@ -3179,7 +4524,11 @@ var addAllFilesFromFolder = function addAllFilesFromFolder(map, workingDir) {
   allFiles.forEach(function (lib) {
     var fsPath = "/node_modules/@types" + lib.replace(workingDir, "");
     var content = fs.readFileSync(lib, "utf8");
-    map.set(fsPath, content);
+    var validExtensions = [".ts", ".tsx"];
+
+    if (validExtensions.includes(path.extname(fsPath))) {
+      map.set(fsPath, content);
+    }
   });
 };
 /** Adds all files from node_modules/@types into the FS Map */
@@ -3356,6 +4705,82 @@ function createSystem(files) {
   };
 }
 /**
+ * Creates a file-system backed System object which can be used in a TypeScript program, you provide
+ * a set of virtual files which are prioritised over the FS versions, then a path to the root of your
+ * project (basically the folder your node_modules lives)
+ */
+
+function createFSBackedSystem(files, projectRoot) {
+  var fs = __webpack_require__(747);
+
+  var path = __webpack_require__(622);
+
+  return {
+    args: [],
+    createDirectory: function createDirectory() {
+      return notImplemented("createDirectory");
+    },
+    // TODO: could make a real file tree
+    directoryExists: audit("directoryExists", function (directory) {
+      return Array.from(files.keys()).some(function (path) {
+        return path.startsWith(directory);
+      }) || fs.existsSync(path.join(projectRoot, directory));
+    }),
+    exit: function exit() {
+      return notImplemented("exit");
+    },
+    fileExists: audit("fileExists", function (fileName) {
+      if (files.has(fileName)) return true;
+      var fsPath = path.join(projectRoot, fileName);
+      var libPath = path.join(projectRoot, "node_modules", "typescript", "lib", fileName);
+
+      for (var _i = 0, _arr = [fsPath, libPath]; _i < _arr.length; _i++) {
+        var filepath = _arr[_i];
+        if (fs.existsSync(filepath)) return true;
+      }
+
+      return false;
+    }),
+    getCurrentDirectory: function getCurrentDirectory() {
+      return "/";
+    },
+    getDirectories: function getDirectories() {
+      return [];
+    },
+    getExecutingFilePath: function getExecutingFilePath() {
+      return notImplemented("getExecutingFilePath");
+    },
+    readDirectory: audit("readDirectory", function (directory) {
+      return directory === "/" ? Array.from(files.keys()) : [];
+    }),
+    readFile: audit("readFile", function (fileName) {
+      if (files.has(fileName)) return files.get(fileName);
+      var fsPath = path.join(projectRoot, fileName);
+      var libPath = path.join(projectRoot, "node_modules", "typescript", "lib", fileName);
+
+      for (var _i2 = 0, _arr2 = [fsPath, libPath]; _i2 < _arr2.length; _i2++) {
+        var filepath = _arr2[_i2];
+        if (fs.existsSync(filepath)) return fs.readFileSync(filepath, {
+          encoding: "utf-8"
+        });
+      }
+
+      return undefined;
+    }),
+    resolvePath: function resolvePath(path) {
+      return path;
+    },
+    newLine: "\n",
+    useCaseSensitiveFileNames: true,
+    write: function write() {
+      return notImplemented("write");
+    },
+    writeFile: function writeFile(fileName, contents) {
+      files.set(fileName, contents);
+    }
+  };
+}
+/**
  * Creates an in-memory CompilerHost -which is essentially an extra wrapper to System
  * which works with TypeScript objects - returns both a compiler host, and a way to add new SourceFile
  * instances to the in-memory file system.
@@ -3404,7 +4829,7 @@ function createVirtualCompilerHost(sys, compilerOptions, ts) {
  * Creates an object which can host a language service against the virtual file-system
  */
 
-function createVirtualLanguageServiceHost(sys, rootFiles, compilerOptions, ts) {
+function createVirtualLanguageServiceHost(sys, rootFiles, compilerOptions, ts, customTransformers) {
   var fileNames = [].concat(rootFiles);
 
   var _createVirtualCompile = createVirtualCompilerHost(sys, compilerOptions, ts),
@@ -3420,6 +4845,9 @@ function createVirtualLanguageServiceHost(sys, rootFiles, compilerOptions, ts) {
     },
     getCompilationSettings: function getCompilationSettings() {
       return compilerOptions;
+    },
+    getCustomTransformers: function getCustomTransformers() {
+      return customTransformers;
     },
     getScriptFileNames: function getScriptFileNames() {
       return fileNames;
@@ -3459,6 +4887,7 @@ exports.addAllFilesFromFolder = addAllFilesFromFolder;
 exports.addFilesForTypesIntoFolder = addFilesForTypesIntoFolder;
 exports.createDefaultMapFromCDN = createDefaultMapFromCDN;
 exports.createDefaultMapFromNodeModules = createDefaultMapFromNodeModules;
+exports.createFSBackedSystem = createFSBackedSystem;
 exports.createSystem = createSystem;
 exports.createVirtualCompilerHost = createVirtualCompilerHost;
 exports.createVirtualLanguageServiceHost = createVirtualLanguageServiceHost;
@@ -5546,6 +6975,59 @@ exports.FetchError = FetchError;
 
 /***/ }),
 
+/***/ 462:
+/***/ (function(module) {
+
+"use strict";
+
+
+// See http://www.robvanderwoude.com/escapechars.php
+const metaCharsRegExp = /([()\][%!^"`<>&|;, *?])/g;
+
+function escapeCommand(arg) {
+    // Escape meta chars
+    arg = arg.replace(metaCharsRegExp, '^$1');
+
+    return arg;
+}
+
+function escapeArgument(arg, doubleEscapeMetaChars) {
+    // Convert to string
+    arg = `${arg}`;
+
+    // Algorithm below is based on https://qntm.org/cmd
+
+    // Sequence of backslashes followed by a double quote:
+    // double up all the backslashes and escape the double quote
+    arg = arg.replace(/(\\*)"/g, '$1$1\\"');
+
+    // Sequence of backslashes followed by the end of the string
+    // (which will become a double quote later):
+    // double up all the backslashes
+    arg = arg.replace(/(\\*)$/, '$1$1');
+
+    // All other backslashes occur literally
+
+    // Quote the whole thing:
+    arg = `"${arg}"`;
+
+    // Escape meta chars
+    arg = arg.replace(metaCharsRegExp, '^$1');
+
+    // Double escape meta chars if necessary
+    if (doubleEscapeMetaChars) {
+        arg = arg.replace(metaCharsRegExp, '^$1');
+    }
+
+    return arg;
+}
+
+module.exports.command = escapeCommand;
+module.exports.argument = escapeArgument;
+
+
+/***/ }),
+
 /***/ 463:
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -5881,12 +7363,57 @@ exports.getState = getState;
 
 /***/ }),
 
-/***/ 473:
-/***/ (function(module) {
+/***/ 489:
+/***/ (function(module, __unusedexports, __webpack_require__) {
 
 "use strict";
 
-module.exports = /^#!.*/;
+
+const path = __webpack_require__(622);
+const which = __webpack_require__(968);
+const pathKey = __webpack_require__(39)();
+
+function resolveCommandAttempt(parsed, withoutPathExt) {
+    const cwd = process.cwd();
+    const hasCustomCwd = parsed.options.cwd != null;
+
+    // If a custom `cwd` was specified, we need to change the process cwd
+    // because `which` will do stat calls but does not support a custom cwd
+    if (hasCustomCwd) {
+        try {
+            process.chdir(parsed.options.cwd);
+        } catch (err) {
+            /* Empty */
+        }
+    }
+
+    let resolved;
+
+    try {
+        resolved = which.sync(parsed.command, {
+            path: (parsed.options.env || process.env)[pathKey],
+            pathExt: withoutPathExt ? path.delimiter : undefined,
+        });
+    } catch (e) {
+        /* Empty */
+    } finally {
+        process.chdir(cwd);
+    }
+
+    // If we successfully resolved, ensure that an absolute path is returned
+    // Note that when a custom `cwd` was used, we need to resolve to an absolute path based on it
+    if (resolved) {
+        resolved = path.resolve(hasCustomCwd ? parsed.options.cwd : '', resolved);
+    }
+
+    return resolved;
+}
+
+function resolveCommand(parsed) {
+    return resolveCommandAttempt(parsed) || resolveCommandAttempt(parsed, true);
+}
+
+module.exports = resolveCommand;
 
 
 /***/ }),
@@ -6096,9 +7623,9 @@ exports.getOctokitOptions = getOctokitOptions;
 /***/ 523:
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var register = __webpack_require__(280)
+var register = __webpack_require__(363)
 var addHook = __webpack_require__(510)
-var removeHook = __webpack_require__(866)
+var removeHook = __webpack_require__(763)
 
 // bind with array of arguments: https://stackoverflow.com/a/21792913
 var bind = Function.bind
@@ -6696,61 +8223,6 @@ exports.HttpClient = HttpClient;
 
 /***/ }),
 
-/***/ 542:
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-const path = __webpack_require__(622);
-const which = __webpack_require__(55);
-const pathKey = __webpack_require__(39)();
-
-function resolveCommandAttempt(parsed, withoutPathExt) {
-    const cwd = process.cwd();
-    const hasCustomCwd = parsed.options.cwd != null;
-
-    // If a custom `cwd` was specified, we need to change the process cwd
-    // because `which` will do stat calls but does not support a custom cwd
-    if (hasCustomCwd) {
-        try {
-            process.chdir(parsed.options.cwd);
-        } catch (err) {
-            /* Empty */
-        }
-    }
-
-    let resolved;
-
-    try {
-        resolved = which.sync(parsed.command, {
-            path: (parsed.options.env || process.env)[pathKey],
-            pathExt: withoutPathExt ? path.delimiter : undefined,
-        });
-    } catch (e) {
-        /* Empty */
-    } finally {
-        process.chdir(cwd);
-    }
-
-    // If we successfully resolved, ensure that an absolute path is returned
-    // Note that when a custom `cwd` was used, we need to resolve to an absolute path based on it
-    if (resolved) {
-        resolved = path.resolve(hasCustomCwd ? parsed.options.cwd : '', resolved);
-    }
-
-    return resolved;
-}
-
-function resolveCommand(parsed) {
-    return resolveCommandAttempt(parsed) || resolveCommandAttempt(parsed, true);
-}
-
-module.exports = resolveCommand;
-
-
-/***/ }),
-
 /***/ 548:
 /***/ (function(module) {
 
@@ -6807,1500 +8279,143 @@ module.exports = isPlainObject;
 
 /***/ }),
 
+/***/ 568:
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+const path = __webpack_require__(622);
+const niceTry = __webpack_require__(948);
+const resolveCommand = __webpack_require__(489);
+const escape = __webpack_require__(462);
+const readShebang = __webpack_require__(389);
+const semver = __webpack_require__(280);
+
+const isWin = process.platform === 'win32';
+const isExecutableRegExp = /\.(?:com|exe)$/i;
+const isCmdShimRegExp = /node_modules[\\/].bin[\\/][^\\/]+\.cmd$/i;
+
+// `options.shell` is supported in Node ^4.8.0, ^5.7.0 and >= 6.0.0
+const supportsShellOption = niceTry(() => semver.satisfies(process.version, '^4.8.0 || ^5.7.0 || >= 6.0.0', true)) || false;
+
+function detectShebang(parsed) {
+    parsed.file = resolveCommand(parsed);
+
+    const shebang = parsed.file && readShebang(parsed.file);
+
+    if (shebang) {
+        parsed.args.unshift(parsed.file);
+        parsed.command = shebang;
+
+        return resolveCommand(parsed);
+    }
+
+    return parsed.file;
+}
+
+function parseNonShell(parsed) {
+    if (!isWin) {
+        return parsed;
+    }
+
+    // Detect & add support for shebangs
+    const commandFile = detectShebang(parsed);
+
+    // We don't need a shell if the command filename is an executable
+    const needsShell = !isExecutableRegExp.test(commandFile);
+
+    // If a shell is required, use cmd.exe and take care of escaping everything correctly
+    // Note that `forceShell` is an hidden option used only in tests
+    if (parsed.options.forceShell || needsShell) {
+        // Need to double escape meta chars if the command is a cmd-shim located in `node_modules/.bin/`
+        // The cmd-shim simply calls execute the package bin file with NodeJS, proxying any argument
+        // Because the escape of metachars with ^ gets interpreted when the cmd.exe is first called,
+        // we need to double escape them
+        const needsDoubleEscapeMetaChars = isCmdShimRegExp.test(commandFile);
+
+        // Normalize posix paths into OS compatible paths (e.g.: foo/bar -> foo\bar)
+        // This is necessary otherwise it will always fail with ENOENT in those cases
+        parsed.command = path.normalize(parsed.command);
+
+        // Escape command & arguments
+        parsed.command = escape.command(parsed.command);
+        parsed.args = parsed.args.map((arg) => escape.argument(arg, needsDoubleEscapeMetaChars));
+
+        const shellCommand = [parsed.command].concat(parsed.args).join(' ');
+
+        parsed.args = ['/d', '/s', '/c', `"${shellCommand}"`];
+        parsed.command = process.env.comspec || 'cmd.exe';
+        parsed.options.windowsVerbatimArguments = true; // Tell node's spawn that the arguments are already escaped
+    }
+
+    return parsed;
+}
+
+function parseShell(parsed) {
+    // If node supports the shell option, there's no need to mimic its behavior
+    if (supportsShellOption) {
+        return parsed;
+    }
+
+    // Mimic node shell option
+    // See https://github.com/nodejs/node/blob/b9f6a2dc059a1062776133f3d4fd848c4da7d150/lib/child_process.js#L335
+    const shellCommand = [parsed.command].concat(parsed.args).join(' ');
+
+    if (isWin) {
+        parsed.command = typeof parsed.options.shell === 'string' ? parsed.options.shell : process.env.comspec || 'cmd.exe';
+        parsed.args = ['/d', '/s', '/c', `"${shellCommand}"`];
+        parsed.options.windowsVerbatimArguments = true; // Tell node's spawn that the arguments are already escaped
+    } else {
+        if (typeof parsed.options.shell === 'string') {
+            parsed.command = parsed.options.shell;
+        } else if (process.platform === 'android') {
+            parsed.command = '/system/bin/sh';
+        } else {
+            parsed.command = '/bin/sh';
+        }
+
+        parsed.args = ['-c', shellCommand];
+    }
+
+    return parsed;
+}
+
+function parse(command, args, options) {
+    // Normalize arguments, similar to nodejs
+    if (args && !Array.isArray(args)) {
+        options = args;
+        args = null;
+    }
+
+    args = args ? args.slice(0) : []; // Clone array to avoid changing the original
+    options = Object.assign({}, options); // Clone object to avoid changing the original
+
+    // Build our parsed object
+    const parsed = {
+        command,
+        args,
+        options,
+        file: undefined,
+        original: {
+            command,
+            args,
+        },
+    };
+
+    // Delegate further parsing to shell or non-shell
+    return options.shell ? parseShell(parsed) : parseNonShell(parsed);
+}
+
+module.exports = parse;
+
+
+/***/ }),
+
 /***/ 605:
 /***/ (function(module) {
 
 module.exports = require("http");
-
-/***/ }),
-
-/***/ 607:
-/***/ (function(module, exports) {
-
-exports = module.exports = SemVer
-
-var debug
-/* istanbul ignore next */
-if (typeof process === 'object' &&
-    process.env &&
-    process.env.NODE_DEBUG &&
-    /\bsemver\b/i.test(process.env.NODE_DEBUG)) {
-  debug = function () {
-    var args = Array.prototype.slice.call(arguments, 0)
-    args.unshift('SEMVER')
-    console.log.apply(console, args)
-  }
-} else {
-  debug = function () {}
-}
-
-// Note: this is the semver.org version of the spec that it implements
-// Not necessarily the package version of this code.
-exports.SEMVER_SPEC_VERSION = '2.0.0'
-
-var MAX_LENGTH = 256
-var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER ||
-  /* istanbul ignore next */ 9007199254740991
-
-// Max safe segment length for coercion.
-var MAX_SAFE_COMPONENT_LENGTH = 16
-
-// The actual regexps go on exports.re
-var re = exports.re = []
-var src = exports.src = []
-var R = 0
-
-// The following Regular Expressions can be used for tokenizing,
-// validating, and parsing SemVer version strings.
-
-// ## Numeric Identifier
-// A single `0`, or a non-zero digit followed by zero or more digits.
-
-var NUMERICIDENTIFIER = R++
-src[NUMERICIDENTIFIER] = '0|[1-9]\\d*'
-var NUMERICIDENTIFIERLOOSE = R++
-src[NUMERICIDENTIFIERLOOSE] = '[0-9]+'
-
-// ## Non-numeric Identifier
-// Zero or more digits, followed by a letter or hyphen, and then zero or
-// more letters, digits, or hyphens.
-
-var NONNUMERICIDENTIFIER = R++
-src[NONNUMERICIDENTIFIER] = '\\d*[a-zA-Z-][a-zA-Z0-9-]*'
-
-// ## Main Version
-// Three dot-separated numeric identifiers.
-
-var MAINVERSION = R++
-src[MAINVERSION] = '(' + src[NUMERICIDENTIFIER] + ')\\.' +
-                   '(' + src[NUMERICIDENTIFIER] + ')\\.' +
-                   '(' + src[NUMERICIDENTIFIER] + ')'
-
-var MAINVERSIONLOOSE = R++
-src[MAINVERSIONLOOSE] = '(' + src[NUMERICIDENTIFIERLOOSE] + ')\\.' +
-                        '(' + src[NUMERICIDENTIFIERLOOSE] + ')\\.' +
-                        '(' + src[NUMERICIDENTIFIERLOOSE] + ')'
-
-// ## Pre-release Version Identifier
-// A numeric identifier, or a non-numeric identifier.
-
-var PRERELEASEIDENTIFIER = R++
-src[PRERELEASEIDENTIFIER] = '(?:' + src[NUMERICIDENTIFIER] +
-                            '|' + src[NONNUMERICIDENTIFIER] + ')'
-
-var PRERELEASEIDENTIFIERLOOSE = R++
-src[PRERELEASEIDENTIFIERLOOSE] = '(?:' + src[NUMERICIDENTIFIERLOOSE] +
-                                 '|' + src[NONNUMERICIDENTIFIER] + ')'
-
-// ## Pre-release Version
-// Hyphen, followed by one or more dot-separated pre-release version
-// identifiers.
-
-var PRERELEASE = R++
-src[PRERELEASE] = '(?:-(' + src[PRERELEASEIDENTIFIER] +
-                  '(?:\\.' + src[PRERELEASEIDENTIFIER] + ')*))'
-
-var PRERELEASELOOSE = R++
-src[PRERELEASELOOSE] = '(?:-?(' + src[PRERELEASEIDENTIFIERLOOSE] +
-                       '(?:\\.' + src[PRERELEASEIDENTIFIERLOOSE] + ')*))'
-
-// ## Build Metadata Identifier
-// Any combination of digits, letters, or hyphens.
-
-var BUILDIDENTIFIER = R++
-src[BUILDIDENTIFIER] = '[0-9A-Za-z-]+'
-
-// ## Build Metadata
-// Plus sign, followed by one or more period-separated build metadata
-// identifiers.
-
-var BUILD = R++
-src[BUILD] = '(?:\\+(' + src[BUILDIDENTIFIER] +
-             '(?:\\.' + src[BUILDIDENTIFIER] + ')*))'
-
-// ## Full Version String
-// A main version, followed optionally by a pre-release version and
-// build metadata.
-
-// Note that the only major, minor, patch, and pre-release sections of
-// the version string are capturing groups.  The build metadata is not a
-// capturing group, because it should not ever be used in version
-// comparison.
-
-var FULL = R++
-var FULLPLAIN = 'v?' + src[MAINVERSION] +
-                src[PRERELEASE] + '?' +
-                src[BUILD] + '?'
-
-src[FULL] = '^' + FULLPLAIN + '$'
-
-// like full, but allows v1.2.3 and =1.2.3, which people do sometimes.
-// also, 1.0.0alpha1 (prerelease without the hyphen) which is pretty
-// common in the npm registry.
-var LOOSEPLAIN = '[v=\\s]*' + src[MAINVERSIONLOOSE] +
-                 src[PRERELEASELOOSE] + '?' +
-                 src[BUILD] + '?'
-
-var LOOSE = R++
-src[LOOSE] = '^' + LOOSEPLAIN + '$'
-
-var GTLT = R++
-src[GTLT] = '((?:<|>)?=?)'
-
-// Something like "2.*" or "1.2.x".
-// Note that "x.x" is a valid xRange identifer, meaning "any version"
-// Only the first item is strictly required.
-var XRANGEIDENTIFIERLOOSE = R++
-src[XRANGEIDENTIFIERLOOSE] = src[NUMERICIDENTIFIERLOOSE] + '|x|X|\\*'
-var XRANGEIDENTIFIER = R++
-src[XRANGEIDENTIFIER] = src[NUMERICIDENTIFIER] + '|x|X|\\*'
-
-var XRANGEPLAIN = R++
-src[XRANGEPLAIN] = '[v=\\s]*(' + src[XRANGEIDENTIFIER] + ')' +
-                   '(?:\\.(' + src[XRANGEIDENTIFIER] + ')' +
-                   '(?:\\.(' + src[XRANGEIDENTIFIER] + ')' +
-                   '(?:' + src[PRERELEASE] + ')?' +
-                   src[BUILD] + '?' +
-                   ')?)?'
-
-var XRANGEPLAINLOOSE = R++
-src[XRANGEPLAINLOOSE] = '[v=\\s]*(' + src[XRANGEIDENTIFIERLOOSE] + ')' +
-                        '(?:\\.(' + src[XRANGEIDENTIFIERLOOSE] + ')' +
-                        '(?:\\.(' + src[XRANGEIDENTIFIERLOOSE] + ')' +
-                        '(?:' + src[PRERELEASELOOSE] + ')?' +
-                        src[BUILD] + '?' +
-                        ')?)?'
-
-var XRANGE = R++
-src[XRANGE] = '^' + src[GTLT] + '\\s*' + src[XRANGEPLAIN] + '$'
-var XRANGELOOSE = R++
-src[XRANGELOOSE] = '^' + src[GTLT] + '\\s*' + src[XRANGEPLAINLOOSE] + '$'
-
-// Coercion.
-// Extract anything that could conceivably be a part of a valid semver
-var COERCE = R++
-src[COERCE] = '(?:^|[^\\d])' +
-              '(\\d{1,' + MAX_SAFE_COMPONENT_LENGTH + '})' +
-              '(?:\\.(\\d{1,' + MAX_SAFE_COMPONENT_LENGTH + '}))?' +
-              '(?:\\.(\\d{1,' + MAX_SAFE_COMPONENT_LENGTH + '}))?' +
-              '(?:$|[^\\d])'
-
-// Tilde ranges.
-// Meaning is "reasonably at or greater than"
-var LONETILDE = R++
-src[LONETILDE] = '(?:~>?)'
-
-var TILDETRIM = R++
-src[TILDETRIM] = '(\\s*)' + src[LONETILDE] + '\\s+'
-re[TILDETRIM] = new RegExp(src[TILDETRIM], 'g')
-var tildeTrimReplace = '$1~'
-
-var TILDE = R++
-src[TILDE] = '^' + src[LONETILDE] + src[XRANGEPLAIN] + '$'
-var TILDELOOSE = R++
-src[TILDELOOSE] = '^' + src[LONETILDE] + src[XRANGEPLAINLOOSE] + '$'
-
-// Caret ranges.
-// Meaning is "at least and backwards compatible with"
-var LONECARET = R++
-src[LONECARET] = '(?:\\^)'
-
-var CARETTRIM = R++
-src[CARETTRIM] = '(\\s*)' + src[LONECARET] + '\\s+'
-re[CARETTRIM] = new RegExp(src[CARETTRIM], 'g')
-var caretTrimReplace = '$1^'
-
-var CARET = R++
-src[CARET] = '^' + src[LONECARET] + src[XRANGEPLAIN] + '$'
-var CARETLOOSE = R++
-src[CARETLOOSE] = '^' + src[LONECARET] + src[XRANGEPLAINLOOSE] + '$'
-
-// A simple gt/lt/eq thing, or just "" to indicate "any version"
-var COMPARATORLOOSE = R++
-src[COMPARATORLOOSE] = '^' + src[GTLT] + '\\s*(' + LOOSEPLAIN + ')$|^$'
-var COMPARATOR = R++
-src[COMPARATOR] = '^' + src[GTLT] + '\\s*(' + FULLPLAIN + ')$|^$'
-
-// An expression to strip any whitespace between the gtlt and the thing
-// it modifies, so that `> 1.2.3` ==> `>1.2.3`
-var COMPARATORTRIM = R++
-src[COMPARATORTRIM] = '(\\s*)' + src[GTLT] +
-                      '\\s*(' + LOOSEPLAIN + '|' + src[XRANGEPLAIN] + ')'
-
-// this one has to use the /g flag
-re[COMPARATORTRIM] = new RegExp(src[COMPARATORTRIM], 'g')
-var comparatorTrimReplace = '$1$2$3'
-
-// Something like `1.2.3 - 1.2.4`
-// Note that these all use the loose form, because they'll be
-// checked against either the strict or loose comparator form
-// later.
-var HYPHENRANGE = R++
-src[HYPHENRANGE] = '^\\s*(' + src[XRANGEPLAIN] + ')' +
-                   '\\s+-\\s+' +
-                   '(' + src[XRANGEPLAIN] + ')' +
-                   '\\s*$'
-
-var HYPHENRANGELOOSE = R++
-src[HYPHENRANGELOOSE] = '^\\s*(' + src[XRANGEPLAINLOOSE] + ')' +
-                        '\\s+-\\s+' +
-                        '(' + src[XRANGEPLAINLOOSE] + ')' +
-                        '\\s*$'
-
-// Star ranges basically just allow anything at all.
-var STAR = R++
-src[STAR] = '(<|>)?=?\\s*\\*'
-
-// Compile to actual regexp objects.
-// All are flag-free, unless they were created above with a flag.
-for (var i = 0; i < R; i++) {
-  debug(i, src[i])
-  if (!re[i]) {
-    re[i] = new RegExp(src[i])
-  }
-}
-
-exports.parse = parse
-function parse (version, options) {
-  if (!options || typeof options !== 'object') {
-    options = {
-      loose: !!options,
-      includePrerelease: false
-    }
-  }
-
-  if (version instanceof SemVer) {
-    return version
-  }
-
-  if (typeof version !== 'string') {
-    return null
-  }
-
-  if (version.length > MAX_LENGTH) {
-    return null
-  }
-
-  var r = options.loose ? re[LOOSE] : re[FULL]
-  if (!r.test(version)) {
-    return null
-  }
-
-  try {
-    return new SemVer(version, options)
-  } catch (er) {
-    return null
-  }
-}
-
-exports.valid = valid
-function valid (version, options) {
-  var v = parse(version, options)
-  return v ? v.version : null
-}
-
-exports.clean = clean
-function clean (version, options) {
-  var s = parse(version.trim().replace(/^[=v]+/, ''), options)
-  return s ? s.version : null
-}
-
-exports.SemVer = SemVer
-
-function SemVer (version, options) {
-  if (!options || typeof options !== 'object') {
-    options = {
-      loose: !!options,
-      includePrerelease: false
-    }
-  }
-  if (version instanceof SemVer) {
-    if (version.loose === options.loose) {
-      return version
-    } else {
-      version = version.version
-    }
-  } else if (typeof version !== 'string') {
-    throw new TypeError('Invalid Version: ' + version)
-  }
-
-  if (version.length > MAX_LENGTH) {
-    throw new TypeError('version is longer than ' + MAX_LENGTH + ' characters')
-  }
-
-  if (!(this instanceof SemVer)) {
-    return new SemVer(version, options)
-  }
-
-  debug('SemVer', version, options)
-  this.options = options
-  this.loose = !!options.loose
-
-  var m = version.trim().match(options.loose ? re[LOOSE] : re[FULL])
-
-  if (!m) {
-    throw new TypeError('Invalid Version: ' + version)
-  }
-
-  this.raw = version
-
-  // these are actually numbers
-  this.major = +m[1]
-  this.minor = +m[2]
-  this.patch = +m[3]
-
-  if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
-    throw new TypeError('Invalid major version')
-  }
-
-  if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
-    throw new TypeError('Invalid minor version')
-  }
-
-  if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
-    throw new TypeError('Invalid patch version')
-  }
-
-  // numberify any prerelease numeric ids
-  if (!m[4]) {
-    this.prerelease = []
-  } else {
-    this.prerelease = m[4].split('.').map(function (id) {
-      if (/^[0-9]+$/.test(id)) {
-        var num = +id
-        if (num >= 0 && num < MAX_SAFE_INTEGER) {
-          return num
-        }
-      }
-      return id
-    })
-  }
-
-  this.build = m[5] ? m[5].split('.') : []
-  this.format()
-}
-
-SemVer.prototype.format = function () {
-  this.version = this.major + '.' + this.minor + '.' + this.patch
-  if (this.prerelease.length) {
-    this.version += '-' + this.prerelease.join('.')
-  }
-  return this.version
-}
-
-SemVer.prototype.toString = function () {
-  return this.version
-}
-
-SemVer.prototype.compare = function (other) {
-  debug('SemVer.compare', this.version, this.options, other)
-  if (!(other instanceof SemVer)) {
-    other = new SemVer(other, this.options)
-  }
-
-  return this.compareMain(other) || this.comparePre(other)
-}
-
-SemVer.prototype.compareMain = function (other) {
-  if (!(other instanceof SemVer)) {
-    other = new SemVer(other, this.options)
-  }
-
-  return compareIdentifiers(this.major, other.major) ||
-         compareIdentifiers(this.minor, other.minor) ||
-         compareIdentifiers(this.patch, other.patch)
-}
-
-SemVer.prototype.comparePre = function (other) {
-  if (!(other instanceof SemVer)) {
-    other = new SemVer(other, this.options)
-  }
-
-  // NOT having a prerelease is > having one
-  if (this.prerelease.length && !other.prerelease.length) {
-    return -1
-  } else if (!this.prerelease.length && other.prerelease.length) {
-    return 1
-  } else if (!this.prerelease.length && !other.prerelease.length) {
-    return 0
-  }
-
-  var i = 0
-  do {
-    var a = this.prerelease[i]
-    var b = other.prerelease[i]
-    debug('prerelease compare', i, a, b)
-    if (a === undefined && b === undefined) {
-      return 0
-    } else if (b === undefined) {
-      return 1
-    } else if (a === undefined) {
-      return -1
-    } else if (a === b) {
-      continue
-    } else {
-      return compareIdentifiers(a, b)
-    }
-  } while (++i)
-}
-
-// preminor will bump the version up to the next minor release, and immediately
-// down to pre-release. premajor and prepatch work the same way.
-SemVer.prototype.inc = function (release, identifier) {
-  switch (release) {
-    case 'premajor':
-      this.prerelease.length = 0
-      this.patch = 0
-      this.minor = 0
-      this.major++
-      this.inc('pre', identifier)
-      break
-    case 'preminor':
-      this.prerelease.length = 0
-      this.patch = 0
-      this.minor++
-      this.inc('pre', identifier)
-      break
-    case 'prepatch':
-      // If this is already a prerelease, it will bump to the next version
-      // drop any prereleases that might already exist, since they are not
-      // relevant at this point.
-      this.prerelease.length = 0
-      this.inc('patch', identifier)
-      this.inc('pre', identifier)
-      break
-    // If the input is a non-prerelease version, this acts the same as
-    // prepatch.
-    case 'prerelease':
-      if (this.prerelease.length === 0) {
-        this.inc('patch', identifier)
-      }
-      this.inc('pre', identifier)
-      break
-
-    case 'major':
-      // If this is a pre-major version, bump up to the same major version.
-      // Otherwise increment major.
-      // 1.0.0-5 bumps to 1.0.0
-      // 1.1.0 bumps to 2.0.0
-      if (this.minor !== 0 ||
-          this.patch !== 0 ||
-          this.prerelease.length === 0) {
-        this.major++
-      }
-      this.minor = 0
-      this.patch = 0
-      this.prerelease = []
-      break
-    case 'minor':
-      // If this is a pre-minor version, bump up to the same minor version.
-      // Otherwise increment minor.
-      // 1.2.0-5 bumps to 1.2.0
-      // 1.2.1 bumps to 1.3.0
-      if (this.patch !== 0 || this.prerelease.length === 0) {
-        this.minor++
-      }
-      this.patch = 0
-      this.prerelease = []
-      break
-    case 'patch':
-      // If this is not a pre-release version, it will increment the patch.
-      // If it is a pre-release it will bump up to the same patch version.
-      // 1.2.0-5 patches to 1.2.0
-      // 1.2.0 patches to 1.2.1
-      if (this.prerelease.length === 0) {
-        this.patch++
-      }
-      this.prerelease = []
-      break
-    // This probably shouldn't be used publicly.
-    // 1.0.0 "pre" would become 1.0.0-0 which is the wrong direction.
-    case 'pre':
-      if (this.prerelease.length === 0) {
-        this.prerelease = [0]
-      } else {
-        var i = this.prerelease.length
-        while (--i >= 0) {
-          if (typeof this.prerelease[i] === 'number') {
-            this.prerelease[i]++
-            i = -2
-          }
-        }
-        if (i === -1) {
-          // didn't increment anything
-          this.prerelease.push(0)
-        }
-      }
-      if (identifier) {
-        // 1.2.0-beta.1 bumps to 1.2.0-beta.2,
-        // 1.2.0-beta.fooblz or 1.2.0-beta bumps to 1.2.0-beta.0
-        if (this.prerelease[0] === identifier) {
-          if (isNaN(this.prerelease[1])) {
-            this.prerelease = [identifier, 0]
-          }
-        } else {
-          this.prerelease = [identifier, 0]
-        }
-      }
-      break
-
-    default:
-      throw new Error('invalid increment argument: ' + release)
-  }
-  this.format()
-  this.raw = this.version
-  return this
-}
-
-exports.inc = inc
-function inc (version, release, loose, identifier) {
-  if (typeof (loose) === 'string') {
-    identifier = loose
-    loose = undefined
-  }
-
-  try {
-    return new SemVer(version, loose).inc(release, identifier).version
-  } catch (er) {
-    return null
-  }
-}
-
-exports.diff = diff
-function diff (version1, version2) {
-  if (eq(version1, version2)) {
-    return null
-  } else {
-    var v1 = parse(version1)
-    var v2 = parse(version2)
-    var prefix = ''
-    if (v1.prerelease.length || v2.prerelease.length) {
-      prefix = 'pre'
-      var defaultResult = 'prerelease'
-    }
-    for (var key in v1) {
-      if (key === 'major' || key === 'minor' || key === 'patch') {
-        if (v1[key] !== v2[key]) {
-          return prefix + key
-        }
-      }
-    }
-    return defaultResult // may be undefined
-  }
-}
-
-exports.compareIdentifiers = compareIdentifiers
-
-var numeric = /^[0-9]+$/
-function compareIdentifiers (a, b) {
-  var anum = numeric.test(a)
-  var bnum = numeric.test(b)
-
-  if (anum && bnum) {
-    a = +a
-    b = +b
-  }
-
-  return a === b ? 0
-    : (anum && !bnum) ? -1
-    : (bnum && !anum) ? 1
-    : a < b ? -1
-    : 1
-}
-
-exports.rcompareIdentifiers = rcompareIdentifiers
-function rcompareIdentifiers (a, b) {
-  return compareIdentifiers(b, a)
-}
-
-exports.major = major
-function major (a, loose) {
-  return new SemVer(a, loose).major
-}
-
-exports.minor = minor
-function minor (a, loose) {
-  return new SemVer(a, loose).minor
-}
-
-exports.patch = patch
-function patch (a, loose) {
-  return new SemVer(a, loose).patch
-}
-
-exports.compare = compare
-function compare (a, b, loose) {
-  return new SemVer(a, loose).compare(new SemVer(b, loose))
-}
-
-exports.compareLoose = compareLoose
-function compareLoose (a, b) {
-  return compare(a, b, true)
-}
-
-exports.rcompare = rcompare
-function rcompare (a, b, loose) {
-  return compare(b, a, loose)
-}
-
-exports.sort = sort
-function sort (list, loose) {
-  return list.sort(function (a, b) {
-    return exports.compare(a, b, loose)
-  })
-}
-
-exports.rsort = rsort
-function rsort (list, loose) {
-  return list.sort(function (a, b) {
-    return exports.rcompare(a, b, loose)
-  })
-}
-
-exports.gt = gt
-function gt (a, b, loose) {
-  return compare(a, b, loose) > 0
-}
-
-exports.lt = lt
-function lt (a, b, loose) {
-  return compare(a, b, loose) < 0
-}
-
-exports.eq = eq
-function eq (a, b, loose) {
-  return compare(a, b, loose) === 0
-}
-
-exports.neq = neq
-function neq (a, b, loose) {
-  return compare(a, b, loose) !== 0
-}
-
-exports.gte = gte
-function gte (a, b, loose) {
-  return compare(a, b, loose) >= 0
-}
-
-exports.lte = lte
-function lte (a, b, loose) {
-  return compare(a, b, loose) <= 0
-}
-
-exports.cmp = cmp
-function cmp (a, op, b, loose) {
-  switch (op) {
-    case '===':
-      if (typeof a === 'object')
-        a = a.version
-      if (typeof b === 'object')
-        b = b.version
-      return a === b
-
-    case '!==':
-      if (typeof a === 'object')
-        a = a.version
-      if (typeof b === 'object')
-        b = b.version
-      return a !== b
-
-    case '':
-    case '=':
-    case '==':
-      return eq(a, b, loose)
-
-    case '!=':
-      return neq(a, b, loose)
-
-    case '>':
-      return gt(a, b, loose)
-
-    case '>=':
-      return gte(a, b, loose)
-
-    case '<':
-      return lt(a, b, loose)
-
-    case '<=':
-      return lte(a, b, loose)
-
-    default:
-      throw new TypeError('Invalid operator: ' + op)
-  }
-}
-
-exports.Comparator = Comparator
-function Comparator (comp, options) {
-  if (!options || typeof options !== 'object') {
-    options = {
-      loose: !!options,
-      includePrerelease: false
-    }
-  }
-
-  if (comp instanceof Comparator) {
-    if (comp.loose === !!options.loose) {
-      return comp
-    } else {
-      comp = comp.value
-    }
-  }
-
-  if (!(this instanceof Comparator)) {
-    return new Comparator(comp, options)
-  }
-
-  debug('comparator', comp, options)
-  this.options = options
-  this.loose = !!options.loose
-  this.parse(comp)
-
-  if (this.semver === ANY) {
-    this.value = ''
-  } else {
-    this.value = this.operator + this.semver.version
-  }
-
-  debug('comp', this)
-}
-
-var ANY = {}
-Comparator.prototype.parse = function (comp) {
-  var r = this.options.loose ? re[COMPARATORLOOSE] : re[COMPARATOR]
-  var m = comp.match(r)
-
-  if (!m) {
-    throw new TypeError('Invalid comparator: ' + comp)
-  }
-
-  this.operator = m[1]
-  if (this.operator === '=') {
-    this.operator = ''
-  }
-
-  // if it literally is just '>' or '' then allow anything.
-  if (!m[2]) {
-    this.semver = ANY
-  } else {
-    this.semver = new SemVer(m[2], this.options.loose)
-  }
-}
-
-Comparator.prototype.toString = function () {
-  return this.value
-}
-
-Comparator.prototype.test = function (version) {
-  debug('Comparator.test', version, this.options.loose)
-
-  if (this.semver === ANY) {
-    return true
-  }
-
-  if (typeof version === 'string') {
-    version = new SemVer(version, this.options)
-  }
-
-  return cmp(version, this.operator, this.semver, this.options)
-}
-
-Comparator.prototype.intersects = function (comp, options) {
-  if (!(comp instanceof Comparator)) {
-    throw new TypeError('a Comparator is required')
-  }
-
-  if (!options || typeof options !== 'object') {
-    options = {
-      loose: !!options,
-      includePrerelease: false
-    }
-  }
-
-  var rangeTmp
-
-  if (this.operator === '') {
-    rangeTmp = new Range(comp.value, options)
-    return satisfies(this.value, rangeTmp, options)
-  } else if (comp.operator === '') {
-    rangeTmp = new Range(this.value, options)
-    return satisfies(comp.semver, rangeTmp, options)
-  }
-
-  var sameDirectionIncreasing =
-    (this.operator === '>=' || this.operator === '>') &&
-    (comp.operator === '>=' || comp.operator === '>')
-  var sameDirectionDecreasing =
-    (this.operator === '<=' || this.operator === '<') &&
-    (comp.operator === '<=' || comp.operator === '<')
-  var sameSemVer = this.semver.version === comp.semver.version
-  var differentDirectionsInclusive =
-    (this.operator === '>=' || this.operator === '<=') &&
-    (comp.operator === '>=' || comp.operator === '<=')
-  var oppositeDirectionsLessThan =
-    cmp(this.semver, '<', comp.semver, options) &&
-    ((this.operator === '>=' || this.operator === '>') &&
-    (comp.operator === '<=' || comp.operator === '<'))
-  var oppositeDirectionsGreaterThan =
-    cmp(this.semver, '>', comp.semver, options) &&
-    ((this.operator === '<=' || this.operator === '<') &&
-    (comp.operator === '>=' || comp.operator === '>'))
-
-  return sameDirectionIncreasing || sameDirectionDecreasing ||
-    (sameSemVer && differentDirectionsInclusive) ||
-    oppositeDirectionsLessThan || oppositeDirectionsGreaterThan
-}
-
-exports.Range = Range
-function Range (range, options) {
-  if (!options || typeof options !== 'object') {
-    options = {
-      loose: !!options,
-      includePrerelease: false
-    }
-  }
-
-  if (range instanceof Range) {
-    if (range.loose === !!options.loose &&
-        range.includePrerelease === !!options.includePrerelease) {
-      return range
-    } else {
-      return new Range(range.raw, options)
-    }
-  }
-
-  if (range instanceof Comparator) {
-    return new Range(range.value, options)
-  }
-
-  if (!(this instanceof Range)) {
-    return new Range(range, options)
-  }
-
-  this.options = options
-  this.loose = !!options.loose
-  this.includePrerelease = !!options.includePrerelease
-
-  // First, split based on boolean or ||
-  this.raw = range
-  this.set = range.split(/\s*\|\|\s*/).map(function (range) {
-    return this.parseRange(range.trim())
-  }, this).filter(function (c) {
-    // throw out any that are not relevant for whatever reason
-    return c.length
-  })
-
-  if (!this.set.length) {
-    throw new TypeError('Invalid SemVer Range: ' + range)
-  }
-
-  this.format()
-}
-
-Range.prototype.format = function () {
-  this.range = this.set.map(function (comps) {
-    return comps.join(' ').trim()
-  }).join('||').trim()
-  return this.range
-}
-
-Range.prototype.toString = function () {
-  return this.range
-}
-
-Range.prototype.parseRange = function (range) {
-  var loose = this.options.loose
-  range = range.trim()
-  // `1.2.3 - 1.2.4` => `>=1.2.3 <=1.2.4`
-  var hr = loose ? re[HYPHENRANGELOOSE] : re[HYPHENRANGE]
-  range = range.replace(hr, hyphenReplace)
-  debug('hyphen replace', range)
-  // `> 1.2.3 < 1.2.5` => `>1.2.3 <1.2.5`
-  range = range.replace(re[COMPARATORTRIM], comparatorTrimReplace)
-  debug('comparator trim', range, re[COMPARATORTRIM])
-
-  // `~ 1.2.3` => `~1.2.3`
-  range = range.replace(re[TILDETRIM], tildeTrimReplace)
-
-  // `^ 1.2.3` => `^1.2.3`
-  range = range.replace(re[CARETTRIM], caretTrimReplace)
-
-  // normalize spaces
-  range = range.split(/\s+/).join(' ')
-
-  // At this point, the range is completely trimmed and
-  // ready to be split into comparators.
-
-  var compRe = loose ? re[COMPARATORLOOSE] : re[COMPARATOR]
-  var set = range.split(' ').map(function (comp) {
-    return parseComparator(comp, this.options)
-  }, this).join(' ').split(/\s+/)
-  if (this.options.loose) {
-    // in loose mode, throw out any that are not valid comparators
-    set = set.filter(function (comp) {
-      return !!comp.match(compRe)
-    })
-  }
-  set = set.map(function (comp) {
-    return new Comparator(comp, this.options)
-  }, this)
-
-  return set
-}
-
-Range.prototype.intersects = function (range, options) {
-  if (!(range instanceof Range)) {
-    throw new TypeError('a Range is required')
-  }
-
-  return this.set.some(function (thisComparators) {
-    return thisComparators.every(function (thisComparator) {
-      return range.set.some(function (rangeComparators) {
-        return rangeComparators.every(function (rangeComparator) {
-          return thisComparator.intersects(rangeComparator, options)
-        })
-      })
-    })
-  })
-}
-
-// Mostly just for testing and legacy API reasons
-exports.toComparators = toComparators
-function toComparators (range, options) {
-  return new Range(range, options).set.map(function (comp) {
-    return comp.map(function (c) {
-      return c.value
-    }).join(' ').trim().split(' ')
-  })
-}
-
-// comprised of xranges, tildes, stars, and gtlt's at this point.
-// already replaced the hyphen ranges
-// turn into a set of JUST comparators.
-function parseComparator (comp, options) {
-  debug('comp', comp, options)
-  comp = replaceCarets(comp, options)
-  debug('caret', comp)
-  comp = replaceTildes(comp, options)
-  debug('tildes', comp)
-  comp = replaceXRanges(comp, options)
-  debug('xrange', comp)
-  comp = replaceStars(comp, options)
-  debug('stars', comp)
-  return comp
-}
-
-function isX (id) {
-  return !id || id.toLowerCase() === 'x' || id === '*'
-}
-
-// ~, ~> --> * (any, kinda silly)
-// ~2, ~2.x, ~2.x.x, ~>2, ~>2.x ~>2.x.x --> >=2.0.0 <3.0.0
-// ~2.0, ~2.0.x, ~>2.0, ~>2.0.x --> >=2.0.0 <2.1.0
-// ~1.2, ~1.2.x, ~>1.2, ~>1.2.x --> >=1.2.0 <1.3.0
-// ~1.2.3, ~>1.2.3 --> >=1.2.3 <1.3.0
-// ~1.2.0, ~>1.2.0 --> >=1.2.0 <1.3.0
-function replaceTildes (comp, options) {
-  return comp.trim().split(/\s+/).map(function (comp) {
-    return replaceTilde(comp, options)
-  }).join(' ')
-}
-
-function replaceTilde (comp, options) {
-  var r = options.loose ? re[TILDELOOSE] : re[TILDE]
-  return comp.replace(r, function (_, M, m, p, pr) {
-    debug('tilde', comp, _, M, m, p, pr)
-    var ret
-
-    if (isX(M)) {
-      ret = ''
-    } else if (isX(m)) {
-      ret = '>=' + M + '.0.0 <' + (+M + 1) + '.0.0'
-    } else if (isX(p)) {
-      // ~1.2 == >=1.2.0 <1.3.0
-      ret = '>=' + M + '.' + m + '.0 <' + M + '.' + (+m + 1) + '.0'
-    } else if (pr) {
-      debug('replaceTilde pr', pr)
-      ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
-            ' <' + M + '.' + (+m + 1) + '.0'
-    } else {
-      // ~1.2.3 == >=1.2.3 <1.3.0
-      ret = '>=' + M + '.' + m + '.' + p +
-            ' <' + M + '.' + (+m + 1) + '.0'
-    }
-
-    debug('tilde return', ret)
-    return ret
-  })
-}
-
-// ^ --> * (any, kinda silly)
-// ^2, ^2.x, ^2.x.x --> >=2.0.0 <3.0.0
-// ^2.0, ^2.0.x --> >=2.0.0 <3.0.0
-// ^1.2, ^1.2.x --> >=1.2.0 <2.0.0
-// ^1.2.3 --> >=1.2.3 <2.0.0
-// ^1.2.0 --> >=1.2.0 <2.0.0
-function replaceCarets (comp, options) {
-  return comp.trim().split(/\s+/).map(function (comp) {
-    return replaceCaret(comp, options)
-  }).join(' ')
-}
-
-function replaceCaret (comp, options) {
-  debug('caret', comp, options)
-  var r = options.loose ? re[CARETLOOSE] : re[CARET]
-  return comp.replace(r, function (_, M, m, p, pr) {
-    debug('caret', comp, _, M, m, p, pr)
-    var ret
-
-    if (isX(M)) {
-      ret = ''
-    } else if (isX(m)) {
-      ret = '>=' + M + '.0.0 <' + (+M + 1) + '.0.0'
-    } else if (isX(p)) {
-      if (M === '0') {
-        ret = '>=' + M + '.' + m + '.0 <' + M + '.' + (+m + 1) + '.0'
-      } else {
-        ret = '>=' + M + '.' + m + '.0 <' + (+M + 1) + '.0.0'
-      }
-    } else if (pr) {
-      debug('replaceCaret pr', pr)
-      if (M === '0') {
-        if (m === '0') {
-          ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
-                ' <' + M + '.' + m + '.' + (+p + 1)
-        } else {
-          ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
-                ' <' + M + '.' + (+m + 1) + '.0'
-        }
-      } else {
-        ret = '>=' + M + '.' + m + '.' + p + '-' + pr +
-              ' <' + (+M + 1) + '.0.0'
-      }
-    } else {
-      debug('no pr')
-      if (M === '0') {
-        if (m === '0') {
-          ret = '>=' + M + '.' + m + '.' + p +
-                ' <' + M + '.' + m + '.' + (+p + 1)
-        } else {
-          ret = '>=' + M + '.' + m + '.' + p +
-                ' <' + M + '.' + (+m + 1) + '.0'
-        }
-      } else {
-        ret = '>=' + M + '.' + m + '.' + p +
-              ' <' + (+M + 1) + '.0.0'
-      }
-    }
-
-    debug('caret return', ret)
-    return ret
-  })
-}
-
-function replaceXRanges (comp, options) {
-  debug('replaceXRanges', comp, options)
-  return comp.split(/\s+/).map(function (comp) {
-    return replaceXRange(comp, options)
-  }).join(' ')
-}
-
-function replaceXRange (comp, options) {
-  comp = comp.trim()
-  var r = options.loose ? re[XRANGELOOSE] : re[XRANGE]
-  return comp.replace(r, function (ret, gtlt, M, m, p, pr) {
-    debug('xRange', comp, ret, gtlt, M, m, p, pr)
-    var xM = isX(M)
-    var xm = xM || isX(m)
-    var xp = xm || isX(p)
-    var anyX = xp
-
-    if (gtlt === '=' && anyX) {
-      gtlt = ''
-    }
-
-    if (xM) {
-      if (gtlt === '>' || gtlt === '<') {
-        // nothing is allowed
-        ret = '<0.0.0'
-      } else {
-        // nothing is forbidden
-        ret = '*'
-      }
-    } else if (gtlt && anyX) {
-      // we know patch is an x, because we have any x at all.
-      // replace X with 0
-      if (xm) {
-        m = 0
-      }
-      p = 0
-
-      if (gtlt === '>') {
-        // >1 => >=2.0.0
-        // >1.2 => >=1.3.0
-        // >1.2.3 => >= 1.2.4
-        gtlt = '>='
-        if (xm) {
-          M = +M + 1
-          m = 0
-          p = 0
-        } else {
-          m = +m + 1
-          p = 0
-        }
-      } else if (gtlt === '<=') {
-        // <=0.7.x is actually <0.8.0, since any 0.7.x should
-        // pass.  Similarly, <=7.x is actually <8.0.0, etc.
-        gtlt = '<'
-        if (xm) {
-          M = +M + 1
-        } else {
-          m = +m + 1
-        }
-      }
-
-      ret = gtlt + M + '.' + m + '.' + p
-    } else if (xm) {
-      ret = '>=' + M + '.0.0 <' + (+M + 1) + '.0.0'
-    } else if (xp) {
-      ret = '>=' + M + '.' + m + '.0 <' + M + '.' + (+m + 1) + '.0'
-    }
-
-    debug('xRange return', ret)
-
-    return ret
-  })
-}
-
-// Because * is AND-ed with everything else in the comparator,
-// and '' means "any version", just remove the *s entirely.
-function replaceStars (comp, options) {
-  debug('replaceStars', comp, options)
-  // Looseness is ignored here.  star is always as loose as it gets!
-  return comp.trim().replace(re[STAR], '')
-}
-
-// This function is passed to string.replace(re[HYPHENRANGE])
-// M, m, patch, prerelease, build
-// 1.2 - 3.4.5 => >=1.2.0 <=3.4.5
-// 1.2.3 - 3.4 => >=1.2.0 <3.5.0 Any 3.4.x will do
-// 1.2 - 3.4 => >=1.2.0 <3.5.0
-function hyphenReplace ($0,
-  from, fM, fm, fp, fpr, fb,
-  to, tM, tm, tp, tpr, tb) {
-  if (isX(fM)) {
-    from = ''
-  } else if (isX(fm)) {
-    from = '>=' + fM + '.0.0'
-  } else if (isX(fp)) {
-    from = '>=' + fM + '.' + fm + '.0'
-  } else {
-    from = '>=' + from
-  }
-
-  if (isX(tM)) {
-    to = ''
-  } else if (isX(tm)) {
-    to = '<' + (+tM + 1) + '.0.0'
-  } else if (isX(tp)) {
-    to = '<' + tM + '.' + (+tm + 1) + '.0'
-  } else if (tpr) {
-    to = '<=' + tM + '.' + tm + '.' + tp + '-' + tpr
-  } else {
-    to = '<=' + to
-  }
-
-  return (from + ' ' + to).trim()
-}
-
-// if ANY of the sets match ALL of its comparators, then pass
-Range.prototype.test = function (version) {
-  if (!version) {
-    return false
-  }
-
-  if (typeof version === 'string') {
-    version = new SemVer(version, this.options)
-  }
-
-  for (var i = 0; i < this.set.length; i++) {
-    if (testSet(this.set[i], version, this.options)) {
-      return true
-    }
-  }
-  return false
-}
-
-function testSet (set, version, options) {
-  for (var i = 0; i < set.length; i++) {
-    if (!set[i].test(version)) {
-      return false
-    }
-  }
-
-  if (version.prerelease.length && !options.includePrerelease) {
-    // Find the set of versions that are allowed to have prereleases
-    // For example, ^1.2.3-pr.1 desugars to >=1.2.3-pr.1 <2.0.0
-    // That should allow `1.2.3-pr.2` to pass.
-    // However, `1.2.4-alpha.notready` should NOT be allowed,
-    // even though it's within the range set by the comparators.
-    for (i = 0; i < set.length; i++) {
-      debug(set[i].semver)
-      if (set[i].semver === ANY) {
-        continue
-      }
-
-      if (set[i].semver.prerelease.length > 0) {
-        var allowed = set[i].semver
-        if (allowed.major === version.major &&
-            allowed.minor === version.minor &&
-            allowed.patch === version.patch) {
-          return true
-        }
-      }
-    }
-
-    // Version has a -pre, but it's not one of the ones we like.
-    return false
-  }
-
-  return true
-}
-
-exports.satisfies = satisfies
-function satisfies (version, range, options) {
-  try {
-    range = new Range(range, options)
-  } catch (er) {
-    return false
-  }
-  return range.test(version)
-}
-
-exports.maxSatisfying = maxSatisfying
-function maxSatisfying (versions, range, options) {
-  var max = null
-  var maxSV = null
-  try {
-    var rangeObj = new Range(range, options)
-  } catch (er) {
-    return null
-  }
-  versions.forEach(function (v) {
-    if (rangeObj.test(v)) {
-      // satisfies(v, range, options)
-      if (!max || maxSV.compare(v) === -1) {
-        // compare(max, v, true)
-        max = v
-        maxSV = new SemVer(max, options)
-      }
-    }
-  })
-  return max
-}
-
-exports.minSatisfying = minSatisfying
-function minSatisfying (versions, range, options) {
-  var min = null
-  var minSV = null
-  try {
-    var rangeObj = new Range(range, options)
-  } catch (er) {
-    return null
-  }
-  versions.forEach(function (v) {
-    if (rangeObj.test(v)) {
-      // satisfies(v, range, options)
-      if (!min || minSV.compare(v) === 1) {
-        // compare(min, v, true)
-        min = v
-        minSV = new SemVer(min, options)
-      }
-    }
-  })
-  return min
-}
-
-exports.minVersion = minVersion
-function minVersion (range, loose) {
-  range = new Range(range, loose)
-
-  var minver = new SemVer('0.0.0')
-  if (range.test(minver)) {
-    return minver
-  }
-
-  minver = new SemVer('0.0.0-0')
-  if (range.test(minver)) {
-    return minver
-  }
-
-  minver = null
-  for (var i = 0; i < range.set.length; ++i) {
-    var comparators = range.set[i]
-
-    comparators.forEach(function (comparator) {
-      // Clone to avoid manipulating the comparator's semver object.
-      var compver = new SemVer(comparator.semver.version)
-      switch (comparator.operator) {
-        case '>':
-          if (compver.prerelease.length === 0) {
-            compver.patch++
-          } else {
-            compver.prerelease.push(0)
-          }
-          compver.raw = compver.format()
-          /* fallthrough */
-        case '':
-        case '>=':
-          if (!minver || gt(minver, compver)) {
-            minver = compver
-          }
-          break
-        case '<':
-        case '<=':
-          /* Ignore maximum versions */
-          break
-        /* istanbul ignore next */
-        default:
-          throw new Error('Unexpected operation: ' + comparator.operator)
-      }
-    })
-  }
-
-  if (minver && range.test(minver)) {
-    return minver
-  }
-
-  return null
-}
-
-exports.validRange = validRange
-function validRange (range, options) {
-  try {
-    // Return '*' instead of '' so that truthiness works.
-    // This will throw if it's invalid anyway
-    return new Range(range, options).range || '*'
-  } catch (er) {
-    return null
-  }
-}
-
-// Determine if version is less than all the versions possible in the range
-exports.ltr = ltr
-function ltr (version, range, options) {
-  return outside(version, range, '<', options)
-}
-
-// Determine if version is greater than all the versions possible in the range.
-exports.gtr = gtr
-function gtr (version, range, options) {
-  return outside(version, range, '>', options)
-}
-
-exports.outside = outside
-function outside (version, range, hilo, options) {
-  version = new SemVer(version, options)
-  range = new Range(range, options)
-
-  var gtfn, ltefn, ltfn, comp, ecomp
-  switch (hilo) {
-    case '>':
-      gtfn = gt
-      ltefn = lte
-      ltfn = lt
-      comp = '>'
-      ecomp = '>='
-      break
-    case '<':
-      gtfn = lt
-      ltefn = gte
-      ltfn = gt
-      comp = '<'
-      ecomp = '<='
-      break
-    default:
-      throw new TypeError('Must provide a hilo val of "<" or ">"')
-  }
-
-  // If it satisifes the range it is not outside
-  if (satisfies(version, range, options)) {
-    return false
-  }
-
-  // From now on, variable terms are as if we're in "gtr" mode.
-  // but note that everything is flipped for the "ltr" function.
-
-  for (var i = 0; i < range.set.length; ++i) {
-    var comparators = range.set[i]
-
-    var high = null
-    var low = null
-
-    comparators.forEach(function (comparator) {
-      if (comparator.semver === ANY) {
-        comparator = new Comparator('>=0.0.0')
-      }
-      high = high || comparator
-      low = low || comparator
-      if (gtfn(comparator.semver, high.semver, options)) {
-        high = comparator
-      } else if (ltfn(comparator.semver, low.semver, options)) {
-        low = comparator
-      }
-    })
-
-    // If the edge version comparator has a operator then our version
-    // isn't outside it
-    if (high.operator === comp || high.operator === ecomp) {
-      return false
-    }
-
-    // If the lowest version comparator has an operator and our version
-    // is less than it then it isn't higher than the range
-    if ((!low.operator || low.operator === comp) &&
-        ltefn(version, low.semver)) {
-      return false
-    } else if (low.operator === ecomp && ltfn(version, low.semver)) {
-      return false
-    }
-  }
-  return true
-}
-
-exports.prerelease = prerelease
-function prerelease (version, options) {
-  var parsed = parse(version, options)
-  return (parsed && parsed.prerelease.length) ? parsed.prerelease : null
-}
-
-exports.intersects = intersects
-function intersects (r1, r2, options) {
-  r1 = new Range(r1, options)
-  r2 = new Range(r2, options)
-  return r1.intersects(r2)
-}
-
-exports.coerce = coerce
-function coerce (version) {
-  if (version instanceof SemVer) {
-    return version
-  }
-
-  if (typeof version !== 'string') {
-    return null
-  }
-
-  var match = version.match(re[COERCE])
-
-  if (match == null) {
-    return null
-  }
-
-  return parse(match[1] +
-    '.' + (match[2] || '0') +
-    '.' + (match[3] || '0'))
-}
-
 
 /***/ }),
 
@@ -9481,63 +9596,34 @@ exports.request = request;
 
 /***/ }),
 
-/***/ 759:
-/***/ (function(module) {
-
-"use strict";
-
-
-// See http://www.robvanderwoude.com/escapechars.php
-const metaCharsRegExp = /([()\][%!^"`<>&|;, *?])/g;
-
-function escapeCommand(arg) {
-    // Escape meta chars
-    arg = arg.replace(metaCharsRegExp, '^$1');
-
-    return arg;
-}
-
-function escapeArgument(arg, doubleEscapeMetaChars) {
-    // Convert to string
-    arg = `${arg}`;
-
-    // Algorithm below is based on https://qntm.org/cmd
-
-    // Sequence of backslashes followed by a double quote:
-    // double up all the backslashes and escape the double quote
-    arg = arg.replace(/(\\*)"/g, '$1$1\\"');
-
-    // Sequence of backslashes followed by the end of the string
-    // (which will become a double quote later):
-    // double up all the backslashes
-    arg = arg.replace(/(\\*)$/, '$1$1');
-
-    // All other backslashes occur literally
-
-    // Quote the whole thing:
-    arg = `"${arg}"`;
-
-    // Escape meta chars
-    arg = arg.replace(metaCharsRegExp, '^$1');
-
-    // Double escape meta chars if necessary
-    if (doubleEscapeMetaChars) {
-        arg = arg.replace(metaCharsRegExp, '^$1');
-    }
-
-    return arg;
-}
-
-module.exports.command = escapeCommand;
-module.exports.argument = escapeArgument;
-
-
-/***/ }),
-
 /***/ 761:
 /***/ (function(module) {
 
 module.exports = require("zlib");
+
+/***/ }),
+
+/***/ 763:
+/***/ (function(module) {
+
+module.exports = removeHook
+
+function removeHook (state, name, method) {
+  if (!state.registry[name]) {
+    return
+  }
+
+  var index = state.registry[name]
+    .map(function (registered) { return registered.orig })
+    .indexOf(method)
+
+  if (index === -1) {
+    return
+  }
+
+  state.registry[name].splice(index, 1)
+}
+
 
 /***/ }),
 
@@ -9588,53 +9674,6 @@ exports.getTypeScriptMeta = async () => {
         sha: res.gitHead
     };
 };
-
-
-/***/ }),
-
-/***/ 774:
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-const cp = __webpack_require__(129);
-const parse = __webpack_require__(884);
-const enoent = __webpack_require__(15);
-
-function spawn(command, args, options) {
-    // Parse the arguments
-    const parsed = parse(command, args, options);
-
-    // Spawn the child process
-    const spawned = cp.spawn(parsed.command, parsed.args, parsed.options);
-
-    // Hook into child process "exit" event to emit an error if the command
-    // does not exists, see: https://github.com/IndigoUnited/node-cross-spawn/issues/16
-    enoent.hookChildProcess(spawned, parsed);
-
-    return spawned;
-}
-
-function spawnSync(command, args, options) {
-    // Parse the arguments
-    const parsed = parse(command, args, options);
-
-    // Spawn the child process
-    const result = cp.spawnSync(parsed.command, parsed.args, parsed.options);
-
-    // Analyze if the command does not exist, see: https://github.com/IndigoUnited/node-cross-spawn/issues/16
-    result.error = result.error || enoent.verifyENOENTSync(result.status, parsed);
-
-    return result;
-}
-
-module.exports = spawn;
-module.exports.spawn = spawn;
-module.exports.sync = spawnSync;
-
-module.exports._parse = parse;
-module.exports._enoent = enoent;
 
 
 /***/ }),
@@ -9729,6 +9768,16 @@ const createTokenAuth = function createTokenAuth(token) {
 
 exports.createTokenAuth = createTokenAuth;
 //# sourceMappingURL=index.js.map
+
+
+/***/ }),
+
+/***/ 816:
+/***/ (function(module) {
+
+"use strict";
+
+module.exports = /^#!.*/;
 
 
 /***/ }),
@@ -10980,158 +11029,95 @@ exports.restEndpointMethods = restEndpointMethods;
 /***/ }),
 
 /***/ 866:
-/***/ (function(module) {
-
-module.exports = removeHook
-
-function removeHook (state, name, method) {
-  if (!state.registry[name]) {
-    return
-  }
-
-  var index = state.registry[name]
-    .map(function (registered) { return registered.orig })
-    .indexOf(method)
-
-  if (index === -1) {
-    return
-  }
-
-  state.registry[name].splice(index, 1)
-}
-
-
-/***/ }),
-
-/***/ 884:
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
 "use strict";
 
+var shebangRegex = __webpack_require__(816);
 
-const path = __webpack_require__(622);
-const niceTry = __webpack_require__(948);
-const resolveCommand = __webpack_require__(542);
-const escape = __webpack_require__(759);
-const readShebang = __webpack_require__(306);
-const semver = __webpack_require__(607);
+module.exports = function (str) {
+	var match = str.match(shebangRegex);
+
+	if (!match) {
+		return null;
+	}
+
+	var arr = match[0].replace(/#! ?/, '').split(' ');
+	var bin = arr[0].split('/').pop();
+	var arg = arr[1];
+
+	return (bin === 'env' ?
+		arg :
+		bin + (arg ? ' ' + arg : '')
+	);
+};
+
+
+/***/ }),
+
+/***/ 881:
+/***/ (function(module) {
+
+"use strict";
+
 
 const isWin = process.platform === 'win32';
-const isExecutableRegExp = /\.(?:com|exe)$/i;
-const isCmdShimRegExp = /node_modules[\\/].bin[\\/][^\\/]+\.cmd$/i;
 
-// `options.shell` is supported in Node ^4.8.0, ^5.7.0 and >= 6.0.0
-const supportsShellOption = niceTry(() => semver.satisfies(process.version, '^4.8.0 || ^5.7.0 || >= 6.0.0', true)) || false;
-
-function detectShebang(parsed) {
-    parsed.file = resolveCommand(parsed);
-
-    const shebang = parsed.file && readShebang(parsed.file);
-
-    if (shebang) {
-        parsed.args.unshift(parsed.file);
-        parsed.command = shebang;
-
-        return resolveCommand(parsed);
-    }
-
-    return parsed.file;
+function notFoundError(original, syscall) {
+    return Object.assign(new Error(`${syscall} ${original.command} ENOENT`), {
+        code: 'ENOENT',
+        errno: 'ENOENT',
+        syscall: `${syscall} ${original.command}`,
+        path: original.command,
+        spawnargs: original.args,
+    });
 }
 
-function parseNonShell(parsed) {
+function hookChildProcess(cp, parsed) {
     if (!isWin) {
-        return parsed;
+        return;
     }
 
-    // Detect & add support for shebangs
-    const commandFile = detectShebang(parsed);
+    const originalEmit = cp.emit;
 
-    // We don't need a shell if the command filename is an executable
-    const needsShell = !isExecutableRegExp.test(commandFile);
+    cp.emit = function (name, arg1) {
+        // If emitting "exit" event and exit code is 1, we need to check if
+        // the command exists and emit an "error" instead
+        // See https://github.com/IndigoUnited/node-cross-spawn/issues/16
+        if (name === 'exit') {
+            const err = verifyENOENT(arg1, parsed, 'spawn');
 
-    // If a shell is required, use cmd.exe and take care of escaping everything correctly
-    // Note that `forceShell` is an hidden option used only in tests
-    if (parsed.options.forceShell || needsShell) {
-        // Need to double escape meta chars if the command is a cmd-shim located in `node_modules/.bin/`
-        // The cmd-shim simply calls execute the package bin file with NodeJS, proxying any argument
-        // Because the escape of metachars with ^ gets interpreted when the cmd.exe is first called,
-        // we need to double escape them
-        const needsDoubleEscapeMetaChars = isCmdShimRegExp.test(commandFile);
-
-        // Normalize posix paths into OS compatible paths (e.g.: foo/bar -> foo\bar)
-        // This is necessary otherwise it will always fail with ENOENT in those cases
-        parsed.command = path.normalize(parsed.command);
-
-        // Escape command & arguments
-        parsed.command = escape.command(parsed.command);
-        parsed.args = parsed.args.map((arg) => escape.argument(arg, needsDoubleEscapeMetaChars));
-
-        const shellCommand = [parsed.command].concat(parsed.args).join(' ');
-
-        parsed.args = ['/d', '/s', '/c', `"${shellCommand}"`];
-        parsed.command = process.env.comspec || 'cmd.exe';
-        parsed.options.windowsVerbatimArguments = true; // Tell node's spawn that the arguments are already escaped
-    }
-
-    return parsed;
-}
-
-function parseShell(parsed) {
-    // If node supports the shell option, there's no need to mimic its behavior
-    if (supportsShellOption) {
-        return parsed;
-    }
-
-    // Mimic node shell option
-    // See https://github.com/nodejs/node/blob/b9f6a2dc059a1062776133f3d4fd848c4da7d150/lib/child_process.js#L335
-    const shellCommand = [parsed.command].concat(parsed.args).join(' ');
-
-    if (isWin) {
-        parsed.command = typeof parsed.options.shell === 'string' ? parsed.options.shell : process.env.comspec || 'cmd.exe';
-        parsed.args = ['/d', '/s', '/c', `"${shellCommand}"`];
-        parsed.options.windowsVerbatimArguments = true; // Tell node's spawn that the arguments are already escaped
-    } else {
-        if (typeof parsed.options.shell === 'string') {
-            parsed.command = parsed.options.shell;
-        } else if (process.platform === 'android') {
-            parsed.command = '/system/bin/sh';
-        } else {
-            parsed.command = '/bin/sh';
+            if (err) {
+                return originalEmit.call(cp, 'error', err);
+            }
         }
 
-        parsed.args = ['-c', shellCommand];
-    }
-
-    return parsed;
-}
-
-function parse(command, args, options) {
-    // Normalize arguments, similar to nodejs
-    if (args && !Array.isArray(args)) {
-        options = args;
-        args = null;
-    }
-
-    args = args ? args.slice(0) : []; // Clone array to avoid changing the original
-    options = Object.assign({}, options); // Clone object to avoid changing the original
-
-    // Build our parsed object
-    const parsed = {
-        command,
-        args,
-        options,
-        file: undefined,
-        original: {
-            command,
-            args,
-        },
+        return originalEmit.apply(cp, arguments); // eslint-disable-line prefer-rest-params
     };
-
-    // Delegate further parsing to shell or non-shell
-    return options.shell ? parseShell(parsed) : parseNonShell(parsed);
 }
 
-module.exports = parse;
+function verifyENOENT(status, parsed) {
+    if (isWin && status === 1 && !parsed.file) {
+        return notFoundError(parsed.original, 'spawn');
+    }
+
+    return null;
+}
+
+function verifyENOENTSync(status, parsed) {
+    if (isWin && status === 1 && !parsed.file) {
+        return notFoundError(parsed.original, 'spawnSync');
+    }
+
+    return null;
+}
+
+module.exports = {
+    hookChildProcess,
+    verifyENOENT,
+    verifyENOENTSync,
+    notFoundError,
+};
 
 
 /***/ }),
@@ -11229,38 +11215,11 @@ exports.withCustomRequest = withCustomRequest;
 
 /***/ }),
 
-/***/ 907:
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-var shebangRegex = __webpack_require__(473);
-
-module.exports = function (str) {
-	var match = str.match(shebangRegex);
-
-	if (!match) {
-		return null;
-	}
-
-	var arr = match[0].replace(/#! ?/, '').split(' ');
-	var bin = arr[0].split('/').pop();
-	var arg = arr[1];
-
-	return (bin === 'env' ?
-		arg :
-		bin + (arg ? ' ' + arg : '')
-	);
-};
-
-
-/***/ }),
-
 /***/ 939:
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
-function e(){return(e=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var i in r)Object.prototype.hasOwnProperty.call(r,i)&&(e[i]=r[i])}return e}).apply(this,arguments)}Object.defineProperty(exports,"__esModule",{value:!0});var t="undefined"!=typeof localStorage,r="undefined"!=typeof process,i=t&&localStorage.getItem("DEBUG")||r&&process.env.DEBUG?console.log:function(e){return""},n=function(e,t){var r,i=e.lib||[],n=["lib.d.ts","lib.dom.d.ts","lib.dom.iterable.d.ts","lib.webworker.d.ts","lib.webworker.importscripts.d.ts","lib.scripthost.d.ts","lib.es5.d.ts","lib.es6.d.ts","lib.es2015.collection.d.ts","lib.es2015.core.d.ts","lib.es2015.d.ts","lib.es2015.generator.d.ts","lib.es2015.iterable.d.ts","lib.es2015.promise.d.ts","lib.es2015.proxy.d.ts","lib.es2015.reflect.d.ts","lib.es2015.symbol.d.ts","lib.es2015.symbol.wellknown.d.ts","lib.es2016.array.include.d.ts","lib.es2016.d.ts","lib.es2016.full.d.ts","lib.es2017.d.ts","lib.es2017.full.d.ts","lib.es2017.intl.d.ts","lib.es2017.object.d.ts","lib.es2017.sharedmemory.d.ts","lib.es2017.string.d.ts","lib.es2017.typedarrays.d.ts","lib.es2018.asyncgenerator.d.ts","lib.es2018.asynciterable.d.ts","lib.es2018.d.ts","lib.es2018.full.d.ts","lib.es2018.intl.d.ts","lib.es2018.promise.d.ts","lib.es2018.regexp.d.ts","lib.es2019.array.d.ts","lib.es2019.d.ts","lib.es2019.full.d.ts","lib.es2019.object.d.ts","lib.es2019.string.d.ts","lib.es2019.symbol.d.ts","lib.es2020.d.ts","lib.es2020.full.d.ts","lib.es2020.string.d.ts","lib.es2020.symbol.wellknown.d.ts","lib.es2020.bigint.d.ts","lib.es2020.promise.d.ts","lib.es2020.intl.d.ts","lib.esnext.array.d.ts","lib.esnext.asynciterable.d.ts","lib.esnext.bigint.d.ts","lib.esnext.d.ts","lib.esnext.full.d.ts","lib.esnext.intl.d.ts","lib.esnext.symbol.d.ts"],s=t.ScriptTarget[e.target||t.ScriptTarget.ES5],o=n.filter((function(e){return e.startsWith("lib."+s.toLowerCase())})),l=n.indexOf(o.pop()),u=((r=i.map((function(e){var t=n.filter((function(t){return t.startsWith("lib."+e.toLowerCase())}));return 0===t.length?0:n.indexOf(t.pop())})))&&r.length?r.reduce((function(e,t){return t>e?t:e})):void 0)||0,a=Math.max(l,u);return n.slice(0,a+1)},s=function(e,t){var r=__webpack_require__(622),i=__webpack_require__(747);(function e(t){var n=[];return i.readdirSync(t).forEach((function(s){s=r.join(t,s);var o=i.statSync(s);o&&o.isDirectory()?n=n.concat(e(s)):n.push(s)})),n})(t).forEach((function(r){var n="/node_modules/@types"+r.replace(t,""),s=i.readFileSync(r,"utf8");e.set(n,s)}))};function o(e){throw new Error("Method '"+e+"' is not implemented.")}function l(e,t){return function(){for(var r=arguments.length,n=new Array(r),s=0;s<r;s++)n[s]=arguments[s];var o=t.apply(void 0,n),l="string"==typeof o?o.slice(0,80)+"...":o;return i.apply(void 0,["> "+e].concat(n)),i("< "+l),o}}var u=function(t){return e({},t.getDefaultCompilerOptions(),{jsx:t.JsxEmit.React,strict:!0,esModuleInterop:!0,module:t.ModuleKind.ESNext,suppressOutputPathCheck:!0,skipLibCheck:!0,skipDefaultLibCheck:!0,moduleResolution:t.ModuleResolutionKind.NodeJs})},a=function(e){return e.replace("/","/lib.").toLowerCase()};function c(t,r,i){var n=new Map;return{compilerHost:e({},t,{getCanonicalFileName:function(e){return e},getDefaultLibFileName:function(){return"/"+i.getDefaultLibFileName(r)},getDirectories:function(){return[]},getNewLine:function(){return t.newLine},getSourceFile:function(e){return n.get(e)||(s=i.createSourceFile(e,t.readFile(e),r.target||u(i).target,!1),n.set(s.fileName,s),s);var s},useCaseSensitiveFileNames:function(){return t.useCaseSensitiveFileNames}}),updateFile:function(e){var r=n.has(e.fileName);return t.writeFile(e.fileName,e.text),n.set(e.fileName,e),r}}}function d(t,r,i,n){var s=[].concat(r),o=c(t,i,n),l=o.compilerHost,u=o.updateFile,a=new Map,d=0;return{languageServiceHost:e({},l,{getProjectVersion:function(){return d.toString()},getCompilationSettings:function(){return i},getScriptFileNames:function(){return s},getScriptSnapshot:function(e){var r=t.readFile(e);if(r)return n.ScriptSnapshot.fromString(r)},getScriptVersion:function(e){return a.get(e)||"0"},writeFile:t.writeFile}),updateFile:function(e){d++,a.set(e.fileName,d.toString()),s.includes(e.fileName)||s.push(e.fileName),u(e)}}}exports.addAllFilesFromFolder=s,exports.addFilesForTypesIntoFolder=function(e){return s(e,"node_modules/@types")},exports.createDefaultMapFromCDN=function(e,t,r,i,s,o,l){var u=o||fetch,a=l||localStorage,c=new Map,d=n(e,i),f="https://typescript.azureedge.net/cdn/"+t+"/typescript/lib/";return(r?function(){return Object.keys(localStorage).forEach((function(e){e.startsWith("ts-lib-")&&!e.startsWith("ts-lib-"+t)&&a.removeItem(e)})),Promise.all(d.map((function(e){var r,i="ts-lib-"+t+"-"+e,n=a.getItem(i);return n?Promise.resolve((r=n,s?s.decompressFromUTF16(r):r)):u(f+e).then((function(e){return e.text()})).then((function(e){var t;return a.setItem(i,(t=e,s?s.compressToUTF16(t):t)),e}))}))).then((function(e){e.forEach((function(e,t){c.set("/"+d[t],e)}))}))}:function(){return Promise.all(d.map((function(e){return u(f+e).then((function(e){return e.text()}))}))).then((function(e){e.forEach((function(e,t){return c.set("/"+d[t],e)}))}))})().then((function(){return c}))},exports.createDefaultMapFromNodeModules=function(e){var t=__webpack_require__(34),r=__webpack_require__(622),i=__webpack_require__(747),s=n(e,t),o=new Map;return s.forEach((function(e){o.set("/"+e,function(e){var t=__webpack_require__.ab + "lib";return i.readFileSync(__webpack_require__.ab + "lib/" + e,"utf8")}(e))})),o},exports.createSystem=function(e){return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:l("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))})),exit:function(){return o("exit")},fileExists:l("fileExists",(function(t){return e.has(t)||e.has(a(t))})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:l("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:l("readFile",(function(t){return e.get(t)||e.get(a(t))})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createVirtualCompilerHost=c,exports.createVirtualLanguageServiceHost=d,exports.createVirtualTypeScriptEnvironment=function(t,r,i,n){void 0===n&&(n={});var s=e({},u(i),{},n),o=d(t,r,s,i),l=o.updateFile,a=i.createLanguageService(o.languageServiceHost),f=a.getCompilerOptionsDiagnostics();if(f.length){var p=c(t,n,i);throw new Error(i.formatDiagnostics(f,p.compilerHost))}return{sys:t,languageService:a,getSourceFile:function(e){var t;return null===(t=a.getProgram())||void 0===t?void 0:t.getSourceFile(e)},createFile:function(e,t){l(i.createSourceFile(e,t,s.target,!1))},updateFile:function(e,t,r){var n=a.getProgram().getSourceFile(e),s=n.text,o=null!=r?r:i.createTextSpan(0,s.length),u=s.slice(0,o.start)+t+s.slice(o.start+o.length),c=i.updateSourceFile(n,u,{span:o,newLength:t.length});l(c)}}},exports.knownLibFilesForCompilerOptions=n;
+function e(){return(e=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var i in r)Object.prototype.hasOwnProperty.call(r,i)&&(e[i]=r[i])}return e}).apply(this,arguments)}Object.defineProperty(exports,"__esModule",{value:!0});var t=!1;try{t="undefined"!=typeof localStorage}catch(e){}var r="undefined"!=typeof process,i=t&&localStorage.getItem("DEBUG")||r&&process.env.DEBUG?console.log:function(e){return""},n=function(e,t){var r,i=e.lib||[],n=["lib.d.ts","lib.dom.d.ts","lib.dom.iterable.d.ts","lib.webworker.d.ts","lib.webworker.importscripts.d.ts","lib.scripthost.d.ts","lib.es5.d.ts","lib.es6.d.ts","lib.es2015.collection.d.ts","lib.es2015.core.d.ts","lib.es2015.d.ts","lib.es2015.generator.d.ts","lib.es2015.iterable.d.ts","lib.es2015.promise.d.ts","lib.es2015.proxy.d.ts","lib.es2015.reflect.d.ts","lib.es2015.symbol.d.ts","lib.es2015.symbol.wellknown.d.ts","lib.es2016.array.include.d.ts","lib.es2016.d.ts","lib.es2016.full.d.ts","lib.es2017.d.ts","lib.es2017.full.d.ts","lib.es2017.intl.d.ts","lib.es2017.object.d.ts","lib.es2017.sharedmemory.d.ts","lib.es2017.string.d.ts","lib.es2017.typedarrays.d.ts","lib.es2018.asyncgenerator.d.ts","lib.es2018.asynciterable.d.ts","lib.es2018.d.ts","lib.es2018.full.d.ts","lib.es2018.intl.d.ts","lib.es2018.promise.d.ts","lib.es2018.regexp.d.ts","lib.es2019.array.d.ts","lib.es2019.d.ts","lib.es2019.full.d.ts","lib.es2019.object.d.ts","lib.es2019.string.d.ts","lib.es2019.symbol.d.ts","lib.es2020.d.ts","lib.es2020.full.d.ts","lib.es2020.string.d.ts","lib.es2020.symbol.wellknown.d.ts","lib.es2020.bigint.d.ts","lib.es2020.promise.d.ts","lib.es2020.intl.d.ts","lib.esnext.array.d.ts","lib.esnext.asynciterable.d.ts","lib.esnext.bigint.d.ts","lib.esnext.d.ts","lib.esnext.full.d.ts","lib.esnext.intl.d.ts","lib.esnext.symbol.d.ts"],s=t.ScriptTarget[e.target||t.ScriptTarget.ES5],o=n.filter((function(e){return e.startsWith("lib."+s.toLowerCase())})),u=n.indexOf(o.pop()),l=((r=i.map((function(e){var t=n.filter((function(t){return t.startsWith("lib."+e.toLowerCase())}));return 0===t.length?0:n.indexOf(t.pop())})))&&r.length?r.reduce((function(e,t){return t>e?t:e})):void 0)||0,a=Math.max(u,l);return n.slice(0,a+1)},s=function(e,t){var r=__webpack_require__(622),i=__webpack_require__(747);(function e(t){var n=[];return i.readdirSync(t).forEach((function(s){s=r.join(t,s);var o=i.statSync(s);o&&o.isDirectory()?n=n.concat(e(s)):n.push(s)})),n})(t).forEach((function(n){var s="/node_modules/@types"+n.replace(t,""),o=i.readFileSync(n,"utf8");[".ts",".tsx"].includes(r.extname(s))&&e.set(s,o)}))};function o(e){throw new Error("Method '"+e+"' is not implemented.")}function u(e,t){return function(){for(var r=arguments.length,n=new Array(r),s=0;s<r;s++)n[s]=arguments[s];var o=t.apply(void 0,n),u="string"==typeof o?o.slice(0,80)+"...":o;return i.apply(void 0,["> "+e].concat(n)),i("< "+u),o}}var l=function(t){return e({},t.getDefaultCompilerOptions(),{jsx:t.JsxEmit.React,strict:!0,esModuleInterop:!0,module:t.ModuleKind.ESNext,suppressOutputPathCheck:!0,skipLibCheck:!0,skipDefaultLibCheck:!0,moduleResolution:t.ModuleResolutionKind.NodeJs})},a=function(e){return e.replace("/","/lib.").toLowerCase()};function c(t,r,i){var n=new Map;return{compilerHost:e({},t,{getCanonicalFileName:function(e){return e},getDefaultLibFileName:function(){return"/"+i.getDefaultLibFileName(r)},getDirectories:function(){return[]},getNewLine:function(){return t.newLine},getSourceFile:function(e){return n.get(e)||(s=i.createSourceFile(e,t.readFile(e),r.target||l(i).target,!1),n.set(s.fileName,s),s);var s},useCaseSensitiveFileNames:function(){return t.useCaseSensitiveFileNames}}),updateFile:function(e){var r=n.has(e.fileName);return t.writeFile(e.fileName,e.text),n.set(e.fileName,e),r}}}function f(t,r,i,n,s){var o=[].concat(r),u=c(t,i,n),l=u.compilerHost,a=u.updateFile,f=new Map,d=0;return{languageServiceHost:e({},l,{getProjectVersion:function(){return d.toString()},getCompilationSettings:function(){return i},getCustomTransformers:function(){return s},getScriptFileNames:function(){return o},getScriptSnapshot:function(e){var r=t.readFile(e);if(r)return n.ScriptSnapshot.fromString(r)},getScriptVersion:function(e){return f.get(e)||"0"},writeFile:t.writeFile}),updateFile:function(e){d++,f.set(e.fileName,d.toString()),o.includes(e.fileName)||o.push(e.fileName),a(e)}}}exports.addAllFilesFromFolder=s,exports.addFilesForTypesIntoFolder=function(e){return s(e,"node_modules/@types")},exports.createDefaultMapFromCDN=function(e,t,r,i,s,o,u){var l=o||fetch,a=u||localStorage,c=new Map,f=n(e,i),d="https://typescript.azureedge.net/cdn/"+t+"/typescript/lib/";return(r?function(){return Object.keys(localStorage).forEach((function(e){e.startsWith("ts-lib-")&&!e.startsWith("ts-lib-"+t)&&a.removeItem(e)})),Promise.all(f.map((function(e){var r,i="ts-lib-"+t+"-"+e,n=a.getItem(i);return n?Promise.resolve((r=n,s?s.decompressFromUTF16(r):r)):l(d+e).then((function(e){return e.text()})).then((function(e){var t;return a.setItem(i,(t=e,s?s.compressToUTF16(t):t)),e}))}))).then((function(e){e.forEach((function(e,t){c.set("/"+f[t],e)}))}))}:function(){return Promise.all(f.map((function(e){return l(d+e).then((function(e){return e.text()}))}))).then((function(e){e.forEach((function(e,t){return c.set("/"+f[t],e)}))}))})().then((function(){return c}))},exports.createDefaultMapFromNodeModules=function(e,t){var r=t||__webpack_require__(34),i=__webpack_require__(622),s=__webpack_require__(747),o=n(e,r),u=new Map;return o.forEach((function(e){u.set("/"+e,function(e){var t=__webpack_require__.ab + "lib";return s.readFileSync(__webpack_require__.ab + "lib/" + e,"utf8")}(e))})),u},exports.createFSBackedSystem=function(e,t){var r=__webpack_require__(747),i=__webpack_require__(622);return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:u("directoryExists",(function(n){return Array.from(e.keys()).some((function(e){return e.startsWith(n)}))||r.existsSync(i.join(t,n))})),exit:function(){return o("exit")},fileExists:u("fileExists",(function(n){if(e.has(n))return!0;for(var s=0,o=[i.join(t,n),i.join(t,"node_modules","typescript","lib",n)];s<o.length;s++)if(r.existsSync(o[s]))return!0;return!1})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:u("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:u("readFile",(function(n){if(e.has(n))return e.get(n);for(var s=0,o=[i.join(t,n),i.join(t,"node_modules","typescript","lib",n)];s<o.length;s++){var u=o[s];if(r.existsSync(u))return r.readFileSync(u,{encoding:"utf-8"})}})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createSystem=function(e){return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:u("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))})),exit:function(){return o("exit")},fileExists:u("fileExists",(function(t){return e.has(t)||e.has(a(t))})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:u("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:u("readFile",(function(t){return e.get(t)||e.get(a(t))})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createVirtualCompilerHost=c,exports.createVirtualLanguageServiceHost=f,exports.createVirtualTypeScriptEnvironment=function(t,r,i,n,s){void 0===n&&(n={});var o=e({},l(i),{},n),u=f(t,r,o,i,s),a=u.updateFile,d=i.createLanguageService(u.languageServiceHost),p=d.getCompilerOptionsDiagnostics();if(p.length){var g=c(t,n,i);throw new Error(i.formatDiagnostics(p,g.compilerHost))}return{sys:t,languageService:d,getSourceFile:function(e){var t;return null===(t=d.getProgram())||void 0===t?void 0:t.getSourceFile(e)},createFile:function(e,t){a(i.createSourceFile(e,t,o.target,!1))},updateFile:function(e,t,r){var n=d.getProgram().getSourceFile(e);if(!n)throw new Error("Did not find a source file for "+e);var s=n.text,o=null!=r?r:i.createTextSpan(0,s.length),u=s.slice(0,o.start)+t+s.slice(o.start+o.length),l=i.updateSourceFile(n,u,{span:o,newLength:t.length});a(l)}}},exports.knownLibFilesForCompilerOptions=n;
 //# sourceMappingURL=vfs.cjs.production.min.js.map
 
 
@@ -11358,7 +11317,7 @@ exports.checkBypass = checkBypass;
 
 const path = __webpack_require__(622);
 const childProcess = __webpack_require__(129);
-const crossSpawn = __webpack_require__(774);
+const crossSpawn = __webpack_require__(20);
 const stripEof = __webpack_require__(768);
 const npmRunPath = __webpack_require__(621);
 const isStream = __webpack_require__(323);
@@ -11775,6 +11734,148 @@ module.exports = options => {
 
 	return stream;
 };
+
+
+/***/ }),
+
+/***/ 968:
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+module.exports = which
+which.sync = whichSync
+
+var isWindows = process.platform === 'win32' ||
+    process.env.OSTYPE === 'cygwin' ||
+    process.env.OSTYPE === 'msys'
+
+var path = __webpack_require__(622)
+var COLON = isWindows ? ';' : ':'
+var isexe = __webpack_require__(742)
+
+function getNotFoundError (cmd) {
+  var er = new Error('not found: ' + cmd)
+  er.code = 'ENOENT'
+
+  return er
+}
+
+function getPathInfo (cmd, opt) {
+  var colon = opt.colon || COLON
+  var pathEnv = opt.path || process.env.PATH || ''
+  var pathExt = ['']
+
+  pathEnv = pathEnv.split(colon)
+
+  var pathExtExe = ''
+  if (isWindows) {
+    pathEnv.unshift(process.cwd())
+    pathExtExe = (opt.pathExt || process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM')
+    pathExt = pathExtExe.split(colon)
+
+
+    // Always test the cmd itself first.  isexe will check to make sure
+    // it's found in the pathExt set.
+    if (cmd.indexOf('.') !== -1 && pathExt[0] !== '')
+      pathExt.unshift('')
+  }
+
+  // If it has a slash, then we don't bother searching the pathenv.
+  // just check the file itself, and that's it.
+  if (cmd.match(/\//) || isWindows && cmd.match(/\\/))
+    pathEnv = ['']
+
+  return {
+    env: pathEnv,
+    ext: pathExt,
+    extExe: pathExtExe
+  }
+}
+
+function which (cmd, opt, cb) {
+  if (typeof opt === 'function') {
+    cb = opt
+    opt = {}
+  }
+
+  var info = getPathInfo(cmd, opt)
+  var pathEnv = info.env
+  var pathExt = info.ext
+  var pathExtExe = info.extExe
+  var found = []
+
+  ;(function F (i, l) {
+    if (i === l) {
+      if (opt.all && found.length)
+        return cb(null, found)
+      else
+        return cb(getNotFoundError(cmd))
+    }
+
+    var pathPart = pathEnv[i]
+    if (pathPart.charAt(0) === '"' && pathPart.slice(-1) === '"')
+      pathPart = pathPart.slice(1, -1)
+
+    var p = path.join(pathPart, cmd)
+    if (!pathPart && (/^\.[\\\/]/).test(cmd)) {
+      p = cmd.slice(0, 2) + p
+    }
+    ;(function E (ii, ll) {
+      if (ii === ll) return F(i + 1, l)
+      var ext = pathExt[ii]
+      isexe(p + ext, { pathExt: pathExtExe }, function (er, is) {
+        if (!er && is) {
+          if (opt.all)
+            found.push(p + ext)
+          else
+            return cb(null, p + ext)
+        }
+        return E(ii + 1, ll)
+      })
+    })(0, pathExt.length)
+  })(0, pathEnv.length)
+}
+
+function whichSync (cmd, opt) {
+  opt = opt || {}
+
+  var info = getPathInfo(cmd, opt)
+  var pathEnv = info.env
+  var pathExt = info.ext
+  var pathExtExe = info.extExe
+  var found = []
+
+  for (var i = 0, l = pathEnv.length; i < l; i ++) {
+    var pathPart = pathEnv[i]
+    if (pathPart.charAt(0) === '"' && pathPart.slice(-1) === '"')
+      pathPart = pathPart.slice(1, -1)
+
+    var p = path.join(pathPart, cmd)
+    if (!pathPart && /^\.[\\\/]/.test(cmd)) {
+      p = cmd.slice(0, 2) + p
+    }
+    for (var j = 0, ll = pathExt.length; j < ll; j ++) {
+      var cur = p + pathExt[j]
+      var is
+      try {
+        is = isexe.sync(cur, { pathExt: pathExtExe })
+        if (is) {
+          if (opt.all)
+            found.push(cur)
+          else
+            return cur
+        }
+      } catch (ex) {}
+    }
+  }
+
+  if (opt.all && found.length)
+    return found
+
+  if (opt.nothrow)
+    return null
+
+  throw getNotFoundError(cmd)
+}
 
 
 /***/ }),

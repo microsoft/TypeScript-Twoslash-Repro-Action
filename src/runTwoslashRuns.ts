@@ -62,13 +62,12 @@ export const runTwoSlash = (label: string) => (
   // TypeScript dep needs to be looked up by the workflow define parts of the FS first
   const typeScripts = ['/home/runner/work/TypeScript/TypeScript/node_modules/typescript']
   const t = typeScripts.find(tpath => existsSync(tpath)) || 'typescript'
-  console.log(t)
-  console.log(readdirSync('/home/runner/work/TypeScript/TypeScript'))
-  console.log(readdirSync('/home/runner/work/TypeScript/TypeScript/node_modules'))
+
   const tsModule = ts || require(t)
+
   try {
     const opts = {noErrorValidation: true, noStaticSemanticInfo: true}
-    result = twoslasher(run.block.content, run.block.lang, opts, tsModule)
+    result = twoslasher(run.block.content, run.block.lang, {defaultOptions: opts, tsModule})
   } catch (error) {
     return {
       assertions: [],

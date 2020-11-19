@@ -4,7 +4,7 @@ import {issueToTwoslashRun} from './issuesToTwoslashRuns'
 import {updateIssue} from './updatesIssue'
 import {runTwoslashRuns} from './runTwoslashRuns'
 import {createAPI} from './utils/api'
-import { downloadTypeScriptVersions } from './downloadTSVersions'
+import {downloadTypeScriptVersions} from './downloadTSVersions'
 
 async function run() {
   const ctx = getContext()

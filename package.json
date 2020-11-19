@@ -8,6 +8,7 @@
     "build": "tsc",
     "format": "prettier --write **/*.ts",
     "deploy": "yarn ncc build lib/_main.js --external typescript",
+    "setup-tests": "node scripts/downloadTSForTests.js",
     "test": "jest",
     "all": "npm run build && npm run format && npm run deploy && npm test"
   },

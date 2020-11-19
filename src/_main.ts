@@ -9,6 +9,8 @@ async function run() {
   const ctx = getContext()
   console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`)
 
+  
+
   const issues = await getIssues(ctx)
   console.log(`Found: ${issues.length} issues with the label: ${ctx.label}`)
 

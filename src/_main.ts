@@ -4,12 +4,13 @@ import {issueToTwoslashRun} from './issuesToTwoslashRuns'
 import {updateIssue} from './updatesIssue'
 import {runTwoslashRuns} from './runTwoslashRuns'
 import {createAPI} from './utils/api'
+import { downloadTypeScriptVersions } from './downloadTSVersions'
 
 async function run() {
   const ctx = getContext()
   console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`)
 
-  
+  await downloadTypeScriptVersions()
 
   const issues = await getIssues(ctx)
   console.log(`Found: ${issues.length} issues with the label: ${ctx.label}`)

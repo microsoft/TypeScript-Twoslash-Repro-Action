@@ -2,11 +2,10 @@ import { execSync } from "child_process"
 import { existsSync, mkdirSync } from "fs"
 import fetch from "node-fetch"
 import { join } from "path"
-import { Context } from "./getContext"
 
 // Fills ./dist/ts with the last 5 major-min releases of TypeScript
 
-export const downloadTypeScriptVersions = async (context: Context) => {
+export const downloadTypeScriptVersions = async () => {
   const releases = await downloadReleases()
   const usableReleases = reduceToMajMin(releases)
   
@@ -57,5 +56,3 @@ const reduceToMajMin = (versions: string[]) => {
     
     return [...latestMajMin.values()] as string[]
 }
-
-downloadTypeScriptVersions({} as any)

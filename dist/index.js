@@ -590,11 +590,11 @@ function filterHighlightLines(codeLines) {
     if (!line.includes("//")) {
       moveForward();
     } else {
-      var highlightMatch = /^\/\/\s*\^+( .+)?$/.exec(line);
-      var queryMatch = /^\/\/\s*\^\?\s*$/.exec(line); // https://regex101.com/r/2yDsRk/1
+      var highlightMatch = /^\s*\/\/\s*\^+( .+)?$/.exec(line);
+      var queryMatch = /^\s*\/\/\s*\^\?\s*$/.exec(line); // https://regex101.com/r/2yDsRk/1
 
       var removePrettierIgnoreMatch = /^\s*\/\/ prettier-ignore$/.exec(line);
-      var completionsQuery = /^\/\/\s*\^\|$/.exec(line);
+      var completionsQuery = /^\s*\/\/\s*\^\|$/.exec(line);
 
       if (queryMatch !== null) {
         var start = line.indexOf("^");
@@ -802,7 +802,7 @@ function filterHandbookOptions(codeLines) {
 
 
 function twoslasher(code, extension, options) {
-  var _options$tsModule, _options$lzstringModu, _options$defaultCompi, _options$fsMap;
+  var _options$tsModule, _options$lzstringModu, _options$defaultCompi;
 
   if (options === void 0) {
     options = {};
@@ -829,22 +829,34 @@ function twoslasher(code, extension, options) {
   var handbookOptions = _extends({}, filterHandbookOptions(codeLines), {}, options.defaultOptions);
 
   var compilerOptions = filterCompilerOptions(codeLines, defaultCompilerOptions, ts);
-  var vfs$1 = (_options$fsMap = options.fsMap) !== null && _options$fsMap !== void 0 ? _options$fsMap : createLocallyPoweredVFS(compilerOptions, ts);
-  var system = vfs.createSystem(vfs$1);
+
+  var getRoot = function getRoot() {
+    var path = __webpack_require__(622);
+
+    var rootPath = options.vfsRoot || process.cwd();
+    return rootPath.split(path.sep).join(path.posix.sep);
+  }; // In a browser we want to DI everything, in node we can use local infra
+
+
+  var useFS = !!options.fsMap;
+  var vfs$1 = useFS && options.fsMap ? options.fsMap : new Map();
+  var system = useFS ? vfs.createSystem(vfs$1) : vfs.createFSBackedSystem(vfs$1, getRoot(), ts);
+  var fsRoot = useFS ? "/" : getRoot() + "/";
   var env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions, options.customTransformers);
   var ls = env.languageService;
   code = codeLines.join("\n");
   var partialQueries = [];
   var queries = [];
   var highlights = [];
-  var nameContent = splitTwoslashCodeInfoFiles(code, defaultFileName);
+  var nameContent = splitTwoslashCodeInfoFiles(code, defaultFileName, fsRoot);
+  var sourceFiles = ["js", "jsx", "ts", "tsx"];
   /** All of the referenced files in the markup */
 
   var filenames = nameContent.map(function (nc) {
     return nc[0];
   });
 
-  var _loop4 = function _loop4() {
+  var _loop5 = function _loop5() {
     var _highlights, _partialQueries;
 
     if (_isArray2) {
@@ -858,7 +870,15 @@ function twoslasher(code, extension, options) {
 
     var file = _ref2;
     var filename = file[0],
-        codeLines = file[1]; // Create the file in the vfs
+        codeLines = file[1];
+    var filetype = filename.split(".").pop() || ""; // Only run the LSP-y things on source files
+
+    var allowJSON = compilerOptions.resolveJsonModule && filetype === "json";
+
+    if (!sourceFiles.includes(filetype) && !allowJSON) {
+      return "continue";
+    } // Create the file in the vfs
+
 
     var newFileCode = codeLines.join("\n");
     env.createFile(filename, newFileCode);
@@ -931,12 +951,18 @@ function twoslasher(code, extension, options) {
     env.updateFile(filename, newEditedFileCode);
   };
 
-  for (var _iterator2 = nameContent, _isArray2 = Array.isArray(_iterator2), _i5 = 0, _iterator2 = _isArray2 ? _iterator2 : _iterator2[Symbol.iterator]();;) {
+  _loop4: for (var _iterator2 = nameContent, _isArray2 = Array.isArray(_iterator2), _i5 = 0, _iterator2 = _isArray2 ? _iterator2 : _iterator2[Symbol.iterator]();;) {
     var _ref2;
 
-    var _ret2 = _loop4();
+    var _ret2 = _loop5();
 
-    if (_ret2 === "break") break;
+    switch (_ret2) {
+      case "break":
+        break _loop4;
+
+      case "continue":
+        continue;
+    }
   } // We need to also strip the highlights + queries from the main file which is shown to people
 
 
@@ -946,6 +972,8 @@ function twoslasher(code, extension, options) {
 
   if (handbookOptions.emit) {
     filenames.forEach(function (f) {
+      var filetype = f.split(".").pop() || "";
+      if (!sourceFiles.includes(filetype)) return;
       var output = ls.getEmitOutput(f);
       output.outputFiles.forEach(function (output) {
         system.writeFile(output.name, output.text);
@@ -960,6 +988,12 @@ function twoslasher(code, extension, options) {
   // const declaredFiles = Object.keys(fileMap)
 
   filenames.forEach(function (file) {
+    var filetype = file.split(".").pop() || ""; // Only run the LSP-y things on source files
+
+    if (!sourceFiles.includes(filetype)) {
+      return;
+    }
+
     if (!handbookOptions.noErrors) {
       errs.push.apply(errs, ls.getSemanticDiagnostics(file));
       errs.push.apply(errs, ls.getSyntacticDiagnostics(file));
@@ -1107,27 +1141,29 @@ function twoslasher(code, extension, options) {
   if (handbookOptions.showEmit) {
     // Get the file which created the file we want to show:
     var emitFilename = handbookOptions.showEmittedFile || defaultFileName;
-    var emitSourceFilename = emitFilename.replace(".js", "").replace(".d.ts", "").replace(".map", "");
+    var emitSourceFilename = fsRoot + emitFilename.replace(".js", "").replace(".d.ts", "").replace(".map", "");
     var emitSource = filenames.find(function (f) {
       return f === emitSourceFilename + ".ts" || f === emitSourceFilename + ".tsx";
     });
 
     if (!emitSource) {
-      var allFiles = filenames.join(", ");
-      throw new Error("Cannot find the corresponding source file for " + emitFilename + " " + handbookOptions.showEmittedFile + " - in " + allFiles);
+      var allFiles = filenames.join(", "); // prettier-ignore
+
+      throw new Error("Cannot find the corresponding source file for " + emitFilename + " (looking for: " + emitSourceFilename + " in the vfs) - in " + allFiles);
     }
 
     var output = ls.getEmitOutput(emitSource);
     var file = output.outputFiles.find(function (o) {
-      return o.name === handbookOptions.showEmittedFile;
+      return o.name === fsRoot + handbookOptions.showEmittedFile;
     });
 
     if (!file) {
       var _allFiles = output.outputFiles.map(function (o) {
         return o.name;
-      }).join(", ");
+      }).join(", "); // prettier-ignore
 
-      throw new Error("Cannot find the file " + handbookOptions.showEmittedFile + " - in " + _allFiles);
+
+      throw new Error("Cannot find the file " + handbookOptions.showEmittedFile + " (looking for: " + (fsRoot + handbookOptions.showEmittedFile) + " in the vfs) - in " + _allFiles);
     }
 
     code = file.text;
@@ -1193,11 +1229,7 @@ function twoslasher(code, extension, options) {
   };
 }
 
-var createLocallyPoweredVFS = function createLocallyPoweredVFS(compilerOptions, ts) {
-  return vfs.createDefaultMapFromNodeModules(compilerOptions, ts);
-};
-
-var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defaultFileName) {
+var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defaultFileName, root) {
   var lines = code.split(/\r\n?|\n/g);
   var nameForFile = code.includes("@filename: " + defaultFileName) ? "global.ts" : defaultFileName;
   var currentFileContent = [];
@@ -1218,7 +1250,7 @@ var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defau
     var line = _ref5;
 
     if (line.includes("// @filename: ")) {
-      fileMap.push([nameForFile, currentFileContent]);
+      fileMap.push([root + nameForFile, currentFileContent]);
       nameForFile = line.split("// @filename: ")[1].trim();
       currentFileContent = [];
     } else {
@@ -1226,7 +1258,7 @@ var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defau
     }
   }
 
-  fileMap.push([nameForFile, currentFileContent]); // Basically, strip these:
+  fileMap.push([root + nameForFile, currentFileContent]); // Basically, strip these:
   // ["index.ts", []]
   // ["index.ts", [""]]
 
@@ -1254,9 +1286,11 @@ const issuesToTwoslashRuns_1 = __webpack_require__(984);
 const updatesIssue_1 = __webpack_require__(700);
 const runTwoslashRuns_1 = __webpack_require__(303);
 const api_1 = __webpack_require__(105);
+const downloadTSVersions_1 = __webpack_require__(580);
 async function run() {
     const ctx = getContext_1.getContext();
     console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`);
+    await downloadTSVersions_1.downloadTypeScriptVersions();
     const issues = await getIssues_1.getIssues(ctx);
     console.log(`Found: ${issues.length} issues with the label: ${ctx.label}`);
     for (const issue of issues) {
@@ -1749,7 +1783,7 @@ module.exports.MaxBufferError = MaxBufferError;
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
-Object.defineProperty(exports,"__esModule",{value:!0});var e=__webpack_require__(640);function t(){return(t=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var n in r)Object.prototype.hasOwnProperty.call(r,n)&&(e[n]=r[n])}return e}).apply(this,arguments)}function r(e,t){switch(t){case"number":return+e;case"string":return e;case"boolean":return"true"===e.toLowerCase()||0===e.length}throw new Error("Unknown primitive type "+t+" with - "+e)}var n=!1;try{n="undefined"!=typeof localStorage}catch(e){}var i="undefined"!=typeof process,o=n&&localStorage.getItem("DEBUG")||i&&process.env.DEBUG?console.log:function(e){return""};function a(e){for(var t=[],r=[],n=0,i=0,a=0,s=function(s){var c=e[s],f=function(){i=n,n+=c.length+1},u=function(t){o("Removing line "+s+" for "+t),a++,e.splice(s,1),s--};if(c.includes("//")){var p=/^\/\/\s*\^+( .+)?$/.exec(c),d=/^\/\/\s*\^\?\s*$/.exec(c),h=/^\s*\/\/ prettier-ignore$/.exec(c),g=/^\/\/\s*\^\|$/.exec(c);if(null!==d){var v=c.indexOf("^");r.push({kind:"query",offset:v,text:void 0,docs:void 0,line:s+a-1}),u("having a query")}else if(null!==p){var m=c.indexOf("^"),y=c.lastIndexOf("^")-m+1,x=i+m,w=p[1]?p[1].trim():"";t.push({kind:"highlight",position:x,length:y,description:w,line:s}),u("having a highlight")}else if(null!==h)u("being a prettier ignore");else if(null!==g){var E=c.indexOf("^");r.push({kind:"completion",offset:E,text:void 0,docs:void 0,line:s+a-1}),u("having a completion query")}else f()}else f();l=s},l=0;l<e.length;l++)s(l);return{highlights:t,queries:r}}function s(e,t,n,i){o("Setting "+e+" to "+t);var a=function(){if(l){if(c>=s.length)return"break";f=s[c++]}else{if((c=s.next()).done)return"break";f=c.value}var i=f;if(i.name.toLowerCase()===e.toLowerCase()){switch(i.type){case"number":case"string":case"boolean":n[i.name]=r(t,i.type);break;case"list":n[i.name]=t.split(",").map((function(e){return r(e,i.element.type)}));break;default:var a=i.type;if(n[i.name]=a.get(t.toLowerCase()),o("Set "+i.name+" to "+n[i.name]),void 0===n[i.name]){var u=Array.from(a.keys());throw new Error("Invalid value "+t+" for "+i.name+". Allowed values: "+u.join(","))}}return{v:void 0}}},s=i.optionDeclarations,l=Array.isArray(s),c=0;e:for(s=l?s:s[Symbol.iterator]();;){var f,u=a();switch(u){case"break":break e;default:if("object"==typeof u)return u.v}}throw new Error("No compiler setting named '"+e+"' exists!")}var l=/^\/\/\s?@(\w+)$/,c=/^\/\/\s?@(\w+):\s?(.+)$/,f={errors:[],noErrors:!1,showEmit:!1,showEmittedFile:"index.js",noStaticSemanticInfo:!1,emit:!1,noErrorValidation:!1};exports.twoslasher=function(r,n,i){var u,p,d,h;void 0===i&&(i={});var g=null!==(u=i.tsModule)&&void 0!==u?u:__webpack_require__(34),v=null!==(p=i.lzstringModule)&&void 0!==p?p:__webpack_require__(637),m=r,y=function(e){switch(e){case"js":case"javascript":return"js";case"ts":case"typescript":return"ts";case"tsx":return"tsx";case"jsn":return"json"}throw new Error("Cannot handle the file extension:"+e)}(n),x="index."+y;o("\n\nLooking at code: \n```"+y+"\n"+r+"\n```\n");var w=t({strict:!0,target:g.ScriptTarget.ES2016,allowJs:!0},null!==(d=i.defaultCompilerOptions)&&void 0!==d?d:{});!function(e){if(e.includes("// @errors "))throw new Error("You have '@errors ' - you're missing the colon after errors");if(e.includes("// @filename "))throw new Error("You have '@filename ' - you're missing the colon after filename")}(r);var E=(r=function(e){return(e=e.replace(/¨D/g,"$")).replace(/¨T/g,"~")}(r)).split(/\r\n?|\n/g),b=t({},function(e){for(var r=t({},f),n=0;n<e.length;n++){var i=void 0;(i=l.exec(e[n]))?i[1]in r&&(r[i[1]]=!0,o("Setting options."+i[1]+" to true"),e.splice(n,1),n--):(i=c.exec(e[n]))&&i[1]in r&&(r[i[1]]=i[2],o("Setting options."+i[1]+" to "+i[2]),e.splice(n,1),n--)}return"errors"in r&&"string"==typeof r.errors&&(r.errors=r.errors.split(" ").map(Number),o("Setting options.error to ",r.errors)),r}(E),{},i.defaultOptions),S=function(e,r,n){for(var i=t({},r),o=0;o<e.length;){var a=void 0;if(a=l.exec(e[o]))i[a[1]]=!0,s(a[1],"true",i,n);else{if(!(a=c.exec(e[o]))){o++;continue}if("filename"===a[1]){o++;continue}s(a[1],a[2],i,n)}e.splice(o,1)}return i}(E,w,g),k=null!==(h=i.fsMap)&&void 0!==h?h:function(t,r){return e.createDefaultMapFromNodeModules(t,r)}(S,g),j=e.createSystem(k),P=e.createVirtualTypeScriptEnvironment(j,[],g,S,i.customTransformers),A=P.languageService;r=E.join("\n");var O=[],F=[],C=[],T=function(e,t){var r=e.split(/\r\n?|\n/g),n=e.includes("@filename: "+t)?"global.ts":t,i=[],o=[],a=r,s=Array.isArray(a),l=0;for(a=s?a:a[Symbol.iterator]();;){var c;if(s){if(l>=a.length)break;c=a[l++]}else{if((l=a.next()).done)break;c=l.value}var f=c;f.includes("// @filename: ")?(o.push([n,i]),n=f.split("// @filename: ")[1].trim(),i=[]):i.push(f)}return o.push([n,i]),o.filter((function(e){return e[1].length>0&&(e[1].length>1||""!==e[1][0])}))}(r,x),q=T.map((function(e){return e[0]})),L=function(){var e,t;if(D){if(M>=I.length)return"break";$=I[M++]}else{if((M=I.next()).done)return"break";$=M.value}var r=$[0],n=$[1],i=n.join("\n");P.createFile(r,i);var o=a(n);(e=C).push.apply(e,o.highlights);var s=o.queries.map((function(e,t){var n,i,o=P.getSourceFile(r),a=g.getPositionOfLineAndCharacter(o,e.line,e.offset);switch(e.kind){case"query":var s=A.getQuickInfoAtPosition(r,a),l=A.getDefinitionAtPosition(r,a),c="Could not get LSP result: "+[(n=P.getSourceFile(r).text)[(i=a)-3],n[i-2],n[i-1],">",n[i],"<",n[i+1],n[i+2],n[i+3]].filter(Boolean).join(""),f=void 0;return s&&l&&s.displayParts&&(c=s.displayParts.map((function(e){return e.text})).join(""),f=s.documentation?s.documentation.map((function(e){return e.text})).join("<br/>"):void 0),{kind:"query",text:c,docs:f,line:e.line-t,offset:e.offset,file:r};case"completion":var u=A.getCompletionsAtPosition(r,a-1,{});if(!u&&!b.noErrorValidation)throw new Error("Twoslash: The ^| query at line "+e.line+" in "+r+" did not return any completions");var p=function(e,t){e=String(e),t=Number(t)>>>0;var r=e.slice(0,t+1).search(/\S+$/),n=e.slice(t).search(/\s/);return n<0?{word:e.slice(r),startPos:r}:{word:e.slice(r,n+t),startPos:r}}(o.text,a-1),d=o.text.slice(p.startPos,a).split(".").pop()||"";return{kind:"completions",completions:(null==u?void 0:u.entries)||[],completionPrefix:d,line:e.line-t,offset:e.offset,file:r}}}));(t=O).push.apply(t,s);var l=n.join("\n");P.updateFile(r,l)},I=T,D=Array.isArray(I),M=0;for(I=D?I:I[Symbol.iterator]();;){var $;if("break"===L())break}var N=r.split(/\r\n?|\n/g);a(N),r=N.join("\n"),b.emit&&q.forEach((function(e){A.getEmitOutput(e).outputFiles.forEach((function(e){j.writeFile(e.name,e.text)}))}));var U=[],V=[];q.forEach((function(e){b.noErrors||(U.push.apply(U,A.getSemanticDiagnostics(e)),U.push.apply(U,A.getSyntacticDiagnostics(e)));var t=P.sys.readFile(e),n=P.getSourceFile(e);if(!n)throw new Error("No sourcefile found for "+e+" in twoslash");if(!b.showEmit){var i=-1==r.indexOf(t)?0:r.indexOf(t),o=r.slice(0,i).split("\n").length-1,a=b.noStaticSemanticInfo?[]:function(e,t){var r=[];return function n(i){e.forEachChild(i,(function(i){if(e.isIdentifier(i)){var o=i.getStart(t,!1);r.push({span:e.createTextSpan(o,i.end-o),text:i.getText(t)})}n(i)}))}(t),r}(g,n),s=Array.isArray(a),l=0;for(a=s?a:a[Symbol.iterator]();;){var c;if(s){if(l>=a.length)break;c=a[l++]}else{if((l=a.next()).done)break;c=l.value}var f=c,u=f.span,p=A.getQuickInfoAtPosition(e,u.start);if(p&&p.displayParts){var d=p.displayParts.map((function(e){return e.text})).join(""),h=f.text,v=p.documentation?p.documentation.map((function(e){return e.text})).join("\n"):void 0,m=u.start+i,y=g.createSourceFile("_.ts",r,g.ScriptTarget.ES2015),x=g.getLineAndCharacterOfPosition(y,m);V.push({text:d,docs:v,start:m,length:u.length,line:x.line,character:x.character,targetString:h})}}O.filter((function(t){return t.file===e})).forEach((function(e){var t=g.getPositionOfLineAndCharacter(n,e.line,e.offset)+i;switch(e.kind){case"query":F.push({docs:e.docs,kind:"query",start:t+i,length:e.text.length,text:e.text,offset:e.offset,line:e.line+o+1});break;case"completions":F.push({completions:e.completions,kind:"completions",start:t+i,completionsPrefix:e.completionPrefix,length:1,offset:e.offset,line:e.line+o+1})}}))}}));var B=U.filter((function(e){return e.file&&q.includes(e.file.fileName)}));!b.noErrorValidation&&B.length&&function(e,t,r,n){var i=e.filter((function(e){return!t.errors.includes(e.code)})),o=i.map((function(e){return e.code})).join(" ");if(i.length){var a="// @errors: "+e.map((function(e){return e.code})).join(" "),s=t.errors.length?" - the annotation specified "+t.errors:"\n\nExpected:\n"+a,l=i.map((function(e){return"["+e.code+"] - "+("string"==typeof e.messageText?e.messageText:e.messageText.messageText)})).join("\n  ");throw new Error("Errors were thrown in the sample, but not included in an errors tag: "+o+s+"\n\n  "+l+"\n\n## Code\n\n'''"+r+"\n"+n+"\n'''")}}(B,b,n,m);var Q=[],R=B,_=Array.isArray(R),z=0;for(R=_?R:R[Symbol.iterator]();;){var G;if(_){if(z>=R.length)break;G=R[z++]}else{if((z=R.next()).done)break;G=z.value}var Y=G,J=P.sys.readFile(Y.file.fileName),H=r.indexOf(J),K=g.flattenDiagnosticMessageText(Y.messageText,"\n").replace(/</g,"&lt;"),W="err-"+Y.code+"-"+Y.start+"-"+Y.length,X=g.getLineAndCharacterOfPosition(Y.file,Y.start);Q.push({category:Y.category,code:Y.code,length:Y.length,start:Y.start?Y.start+H:void 0,line:X.line,character:X.character,renderedMessage:K,id:W})}if(b.showEmit){var Z=b.showEmittedFile||x,ee=Z.replace(".js","").replace(".d.ts","").replace(".map",""),te=q.find((function(e){return e===ee+".ts"||e===ee+".tsx"}));if(!te){var re=q.join(", ");throw new Error("Cannot find the corresponding source file for "+Z+" "+b.showEmittedFile+" - in "+re)}var ne=A.getEmitOutput(te),ie=ne.outputFiles.find((function(e){return e.name===b.showEmittedFile}));if(!ie){var oe=ne.outputFiles.map((function(e){return e.name})).join(", ");throw new Error("Cannot find the file "+b.showEmittedFile+" - in "+oe)}r=ie.text,n=ie.name.split(".").pop(),C=[],O=[],V=[]}var ae="https://www.typescriptlang.org/play/#code/"+v.compressToEncodedURIComponent(m),se="// ---cut---\n";if(r.includes(se)){var le=r.indexOf(se)+se.length,ce=r.substr(0,le).split("\n").length-1;r=r.split(se).pop(),V.forEach((function(e){e.start-=le,e.line-=ce})),V=V.filter((function(e){return e.start>-1})),Q.forEach((function(e){e.start&&(e.start-=le),e.line&&(e.line-=ce)})),Q=Q.filter((function(e){return e.start&&e.start>-1})),C.forEach((function(e){e.position-=le,e.line-=ce})),C=C.filter((function(e){return e.position>-1})),F.forEach((function(e){return e.line-=ce})),F=F.filter((function(e){return e.line>-1}))}return{code:r,extension:n,highlights:C,queries:F,staticQuickInfos:V,errors:Q,playgroundURL:ae}};
+Object.defineProperty(exports,"__esModule",{value:!0});var e=__webpack_require__(640);function t(){return(t=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var n in r)Object.prototype.hasOwnProperty.call(r,n)&&(e[n]=r[n])}return e}).apply(this,arguments)}function r(e,t){switch(t){case"number":return+e;case"string":return e;case"boolean":return"true"===e.toLowerCase()||0===e.length}throw new Error("Unknown primitive type "+t+" with - "+e)}var n=!1;try{n="undefined"!=typeof localStorage}catch(e){}var i="undefined"!=typeof process,o=n&&localStorage.getItem("DEBUG")||i&&process.env.DEBUG?console.log:function(e){return""};function s(e){for(var t=[],r=[],n=0,i=0,s=0,a=function(a){var c=e[a],f=function(){i=n,n+=c.length+1},u=function(t){o("Removing line "+a+" for "+t),s++,e.splice(a,1),a--};if(c.includes("//")){var p=/^\s*\/\/\s*\^+( .+)?$/.exec(c),d=/^\s*\/\/\s*\^\?\s*$/.exec(c),h=/^\s*\/\/ prettier-ignore$/.exec(c),g=/^\s*\/\/\s*\^\|$/.exec(c);if(null!==d){var v=c.indexOf("^");r.push({kind:"query",offset:v,text:void 0,docs:void 0,line:a+s-1}),u("having a query")}else if(null!==p){var m=c.indexOf("^"),y=c.lastIndexOf("^")-m+1,x=i+m,w=p[1]?p[1].trim():"";t.push({kind:"highlight",position:x,length:y,description:w,line:a}),u("having a highlight")}else if(null!==h)u("being a prettier ignore");else if(null!==g){var E=c.indexOf("^");r.push({kind:"completion",offset:E,text:void 0,docs:void 0,line:a+s-1}),u("having a completion query")}else f()}else f();l=a},l=0;l<e.length;l++)a(l);return{highlights:t,queries:r}}function a(e,t,n,i){o("Setting "+e+" to "+t);var s=function(){if(l){if(c>=a.length)return"break";f=a[c++]}else{if((c=a.next()).done)return"break";f=c.value}var i=f;if(i.name.toLowerCase()===e.toLowerCase()){switch(i.type){case"number":case"string":case"boolean":n[i.name]=r(t,i.type);break;case"list":n[i.name]=t.split(",").map((function(e){return r(e,i.element.type)}));break;default:var s=i.type;if(n[i.name]=s.get(t.toLowerCase()),o("Set "+i.name+" to "+n[i.name]),void 0===n[i.name]){var u=Array.from(s.keys());throw new Error("Invalid value "+t+" for "+i.name+". Allowed values: "+u.join(","))}}return{v:void 0}}},a=i.optionDeclarations,l=Array.isArray(a),c=0;e:for(a=l?a:a[Symbol.iterator]();;){var f,u=s();switch(u){case"break":break e;default:if("object"==typeof u)return u.v}}throw new Error("No compiler setting named '"+e+"' exists!")}var l=/^\/\/\s?@(\w+)$/,c=/^\/\/\s?@(\w+):\s?(.+)$/,f={errors:[],noErrors:!1,showEmit:!1,showEmittedFile:"index.js",noStaticSemanticInfo:!1,emit:!1,noErrorValidation:!1};exports.twoslasher=function(r,n,i){var u,p,d;void 0===i&&(i={});var h=null!==(u=i.tsModule)&&void 0!==u?u:__webpack_require__(34),g=null!==(p=i.lzstringModule)&&void 0!==p?p:__webpack_require__(637),v=r,m=function(e){switch(e){case"js":case"javascript":return"js";case"ts":case"typescript":return"ts";case"tsx":return"tsx";case"jsn":return"json"}throw new Error("Cannot handle the file extension:"+e)}(n),y="index."+m;o("\n\nLooking at code: \n```"+m+"\n"+r+"\n```\n");var x=t({strict:!0,target:h.ScriptTarget.ES2016,allowJs:!0},null!==(d=i.defaultCompilerOptions)&&void 0!==d?d:{});!function(e){if(e.includes("// @errors "))throw new Error("You have '@errors ' - you're missing the colon after errors");if(e.includes("// @filename "))throw new Error("You have '@filename ' - you're missing the colon after filename")}(r);var w=(r=function(e){return(e=e.replace(/¨D/g,"$")).replace(/¨T/g,"~")}(r)).split(/\r\n?|\n/g),E=t({},function(e){for(var r=t({},f),n=0;n<e.length;n++){var i=void 0;(i=l.exec(e[n]))?i[1]in r&&(r[i[1]]=!0,o("Setting options."+i[1]+" to true"),e.splice(n,1),n--):(i=c.exec(e[n]))&&i[1]in r&&(r[i[1]]=i[2],o("Setting options."+i[1]+" to "+i[2]),e.splice(n,1),n--)}return"errors"in r&&"string"==typeof r.errors&&(r.errors=r.errors.split(" ").map(Number),o("Setting options.error to ",r.errors)),r}(w),{},i.defaultOptions),b=function(e,r,n){for(var i=t({},r),o=0;o<e.length;){var s=void 0;if(s=l.exec(e[o]))i[s[1]]=!0,a(s[1],"true",i,n);else{if(!(s=c.exec(e[o]))){o++;continue}if("filename"===s[1]){o++;continue}a(s[1],s[2],i,n)}e.splice(o,1)}return i}(w,x,h),S=function(){var e=__webpack_require__(622);return(i.vfsRoot||process.cwd()).split(e.sep).join(e.posix.sep)},k=!!i.fsMap,j=k&&i.fsMap?i.fsMap:new Map,P=k?e.createSystem(j):e.createFSBackedSystem(j,S(),h),A=k?"/":S()+"/",O=e.createVirtualTypeScriptEnvironment(P,[],h,b,i.customTransformers),F=O.languageService;r=w.join("\n");var C=[],T=[],q=[],L=function(e,t,r){var n=e.split(/\r\n?|\n/g),i=e.includes("@filename: "+t)?"global.ts":t,o=[],s=[],a=n,l=Array.isArray(a),c=0;for(a=l?a:a[Symbol.iterator]();;){var f;if(l){if(c>=a.length)break;f=a[c++]}else{if((c=a.next()).done)break;f=c.value}var u=f;u.includes("// @filename: ")?(s.push([r+i,o]),i=u.split("// @filename: ")[1].trim(),o=[]):o.push(u)}return s.push([r+i,o]),s.filter((function(e){return e[1].length>0&&(e[1].length>1||""!==e[1][0])}))}(r,y,A),I=["js","jsx","ts","tsx"],M=L.map((function(e){return e[0]})),D=function(){var e,t;if(N){if(U>=$.length)return"break";B=$[U++]}else{if((U=$.next()).done)return"break";B=U.value}var r=B[0],n=B[1],i=r.split(".").pop()||"",o=b.resolveJsonModule&&"json"===i;if(!I.includes(i)&&!o)return"continue";var a=n.join("\n");O.createFile(r,a);var l=s(n);(e=q).push.apply(e,l.highlights);var c=l.queries.map((function(e,t){var n,i,o=O.getSourceFile(r),s=h.getPositionOfLineAndCharacter(o,e.line,e.offset);switch(e.kind){case"query":var a=F.getQuickInfoAtPosition(r,s),l=F.getDefinitionAtPosition(r,s),c="Could not get LSP result: "+[(n=O.getSourceFile(r).text)[(i=s)-3],n[i-2],n[i-1],">",n[i],"<",n[i+1],n[i+2],n[i+3]].filter(Boolean).join(""),f=void 0;return a&&l&&a.displayParts&&(c=a.displayParts.map((function(e){return e.text})).join(""),f=a.documentation?a.documentation.map((function(e){return e.text})).join("<br/>"):void 0),{kind:"query",text:c,docs:f,line:e.line-t,offset:e.offset,file:r};case"completion":var u=F.getCompletionsAtPosition(r,s-1,{});if(!u&&!E.noErrorValidation)throw new Error("Twoslash: The ^| query at line "+e.line+" in "+r+" did not return any completions");var p=function(e,t){e=String(e),t=Number(t)>>>0;var r=e.slice(0,t+1).search(/\S+$/),n=e.slice(t).search(/\s/);return n<0?{word:e.slice(r),startPos:r}:{word:e.slice(r,n+t),startPos:r}}(o.text,s-1),d=o.text.slice(p.startPos,s).split(".").pop()||"";return{kind:"completions",completions:(null==u?void 0:u.entries)||[],completionPrefix:d,line:e.line-t,offset:e.offset,file:r}}}));(t=C).push.apply(t,c);var f=n.join("\n");O.updateFile(r,f)},$=L,N=Array.isArray($),U=0;e:for($=N?$:$[Symbol.iterator]();;){var B;switch(D()){case"break":break e;case"continue":continue}}var R=r.split(/\r\n?|\n/g);s(R),r=R.join("\n"),E.emit&&M.forEach((function(e){var t=e.split(".").pop()||"";I.includes(t)&&F.getEmitOutput(e).outputFiles.forEach((function(e){P.writeFile(e.name,e.text)}))}));var V=[],Q=[];M.forEach((function(e){var t=e.split(".").pop()||"";if(I.includes(t)){E.noErrors||(V.push.apply(V,F.getSemanticDiagnostics(e)),V.push.apply(V,F.getSyntacticDiagnostics(e)));var n=O.sys.readFile(e),i=O.getSourceFile(e);if(!i)throw new Error("No sourcefile found for "+e+" in twoslash");if(!E.showEmit){var o=-1==r.indexOf(n)?0:r.indexOf(n),s=r.slice(0,o).split("\n").length-1,a=E.noStaticSemanticInfo?[]:function(e,t){var r=[];return function n(i){e.forEachChild(i,(function(i){if(e.isIdentifier(i)){var o=i.getStart(t,!1);r.push({span:e.createTextSpan(o,i.end-o),text:i.getText(t)})}n(i)}))}(t),r}(h,i),l=Array.isArray(a),c=0;for(a=l?a:a[Symbol.iterator]();;){var f;if(l){if(c>=a.length)break;f=a[c++]}else{if((c=a.next()).done)break;f=c.value}var u=f,p=u.span,d=F.getQuickInfoAtPosition(e,p.start);if(d&&d.displayParts){var g=d.displayParts.map((function(e){return e.text})).join(""),v=u.text,m=d.documentation?d.documentation.map((function(e){return e.text})).join("\n"):void 0,y=p.start+o,x=h.createSourceFile("_.ts",r,h.ScriptTarget.ES2015),w=h.getLineAndCharacterOfPosition(x,y);Q.push({text:g,docs:m,start:y,length:p.length,line:w.line,character:w.character,targetString:v})}}C.filter((function(t){return t.file===e})).forEach((function(e){var t=h.getPositionOfLineAndCharacter(i,e.line,e.offset)+o;switch(e.kind){case"query":T.push({docs:e.docs,kind:"query",start:t+o,length:e.text.length,text:e.text,offset:e.offset,line:e.line+s+1});break;case"completions":T.push({completions:e.completions,kind:"completions",start:t+o,completionsPrefix:e.completionPrefix,length:1,offset:e.offset,line:e.line+s+1})}}))}}}));var _=V.filter((function(e){return e.file&&M.includes(e.file.fileName)}));!E.noErrorValidation&&_.length&&function(e,t,r,n){var i=e.filter((function(e){return!t.errors.includes(e.code)})),o=i.map((function(e){return e.code})).join(" ");if(i.length){var s="// @errors: "+e.map((function(e){return e.code})).join(" "),a=t.errors.length?" - the annotation specified "+t.errors:"\n\nExpected:\n"+s,l=i.map((function(e){return"["+e.code+"] - "+("string"==typeof e.messageText?e.messageText:e.messageText.messageText)})).join("\n  ");throw new Error("Errors were thrown in the sample, but not included in an errors tag: "+o+a+"\n\n  "+l+"\n\n## Code\n\n'''"+r+"\n"+n+"\n'''")}}(_,E,n,v);var z=[],G=_,J=Array.isArray(G),Y=0;for(G=J?G:G[Symbol.iterator]();;){var H;if(J){if(Y>=G.length)break;H=G[Y++]}else{if((Y=G.next()).done)break;H=Y.value}var K=H,W=O.sys.readFile(K.file.fileName),X=r.indexOf(W),Z=h.flattenDiagnosticMessageText(K.messageText,"\n").replace(/</g,"&lt;"),ee="err-"+K.code+"-"+K.start+"-"+K.length,te=h.getLineAndCharacterOfPosition(K.file,K.start);z.push({category:K.category,code:K.code,length:K.length,start:K.start?K.start+X:void 0,line:te.line,character:te.character,renderedMessage:Z,id:ee})}if(E.showEmit){var re=E.showEmittedFile||y,ne=A+re.replace(".js","").replace(".d.ts","").replace(".map",""),ie=M.find((function(e){return e===ne+".ts"||e===ne+".tsx"}));if(!ie){var oe=M.join(", ");throw new Error("Cannot find the corresponding source file for "+re+" (looking for: "+ne+" in the vfs) - in "+oe)}var se=F.getEmitOutput(ie),ae=se.outputFiles.find((function(e){return e.name===A+E.showEmittedFile}));if(!ae){var le=se.outputFiles.map((function(e){return e.name})).join(", ");throw new Error("Cannot find the file "+E.showEmittedFile+" (looking for: "+(A+E.showEmittedFile)+" in the vfs) - in "+le)}r=ae.text,n=ae.name.split(".").pop(),q=[],C=[],Q=[]}var ce="https://www.typescriptlang.org/play/#code/"+g.compressToEncodedURIComponent(v),fe="// ---cut---\n";if(r.includes(fe)){var ue=r.indexOf(fe)+fe.length,pe=r.substr(0,ue).split("\n").length-1;r=r.split(fe).pop(),Q.forEach((function(e){e.start-=ue,e.line-=pe})),Q=Q.filter((function(e){return e.start>-1})),z.forEach((function(e){e.start&&(e.start-=ue),e.line&&(e.line-=pe)})),z=z.filter((function(e){return e.start&&e.start>-1})),q.forEach((function(e){e.position-=ue,e.line-=pe})),q=q.filter((function(e){return e.position>-1})),T.forEach((function(e){return e.line-=pe})),T=T.filter((function(e){return e.line>-1}))}return{code:r,extension:n,highlights:q,queries:T,staticQuickInfos:Q,errors:z,playgroundURL:ce}};
 //# sourceMappingURL=twoslash.cjs.production.min.js.map
 
 
@@ -4613,7 +4647,7 @@ var createDefaultMapFromCDN = function createDefaultMapFromCDN(options, version,
   return func().then(function () {
     return fsMap;
   });
-}; // TODO: Add some kind of debug logger (needs to be compat with sandbox's deployment, not just via npm)
+};
 
 function notImplemented(methodName) {
   throw new Error("Method '" + methodName + "' is not implemented.");
@@ -4710,11 +4744,16 @@ function createSystem(files) {
  * project (basically the folder your node_modules lives)
  */
 
-function createFSBackedSystem(files, projectRoot) {
-  var fs = __webpack_require__(747);
+function createFSBackedSystem(files, _projectRoot, ts) {
+  // We need to make an isolated folder for the tsconfig, but also need to be able to resolve the
+  // existing node_modules structures going back through the history
+  var root = _projectRoot + "/vfs";
 
-  var path = __webpack_require__(622);
+  var path = __webpack_require__(622); // The default System in TypeScript
 
+
+  var nodeSys = ts.sys;
+  var tsLib = __webpack_require__.ab + "lib";
   return {
     args: [],
     createDirectory: function createDirectory() {
@@ -4724,51 +4763,48 @@ function createFSBackedSystem(files, projectRoot) {
     directoryExists: audit("directoryExists", function (directory) {
       return Array.from(files.keys()).some(function (path) {
         return path.startsWith(directory);
-      }) || fs.existsSync(path.join(projectRoot, directory));
+      }) || nodeSys.directoryExists(directory);
     }),
-    exit: function exit() {
-      return notImplemented("exit");
-    },
+    exit: nodeSys.exit,
     fileExists: audit("fileExists", function (fileName) {
-      if (files.has(fileName)) return true;
-      var fsPath = path.join(projectRoot, fileName);
-      var libPath = path.join(projectRoot, "node_modules", "typescript", "lib", fileName);
+      if (files.has(fileName)) return true; // Don't let other tsconfigs end up touching the vfs
 
-      for (var _i = 0, _arr = [fsPath, libPath]; _i < _arr.length; _i++) {
-        var filepath = _arr[_i];
-        if (fs.existsSync(filepath)) return true;
+      if (fileName.includes("tsconfig.json") || fileName.includes("tsconfig.json")) return false;
+
+      if (fileName.startsWith("/lib")) {
+        var tsLibName = __webpack_require__.ab + "lib/" + fileName.replace("/", "");
+        return nodeSys.fileExists(tsLibName);
       }
 
-      return false;
+      return nodeSys.fileExists(fileName);
     }),
     getCurrentDirectory: function getCurrentDirectory() {
-      return "/";
+      return root;
     },
-    getDirectories: function getDirectories() {
-      return [];
-    },
+    getDirectories: nodeSys.getDirectories,
     getExecutingFilePath: function getExecutingFilePath() {
       return notImplemented("getExecutingFilePath");
     },
-    readDirectory: audit("readDirectory", function (directory) {
-      return directory === "/" ? Array.from(files.keys()) : [];
+    readDirectory: audit("readDirectory", function () {
+      if ((arguments.length <= 0 ? undefined : arguments[0]) === "/") {
+        return Array.from(files.keys());
+      } else {
+        return nodeSys.readDirectory.apply(nodeSys, arguments);
+      }
     }),
     readFile: audit("readFile", function (fileName) {
       if (files.has(fileName)) return files.get(fileName);
-      var fsPath = path.join(projectRoot, fileName);
-      var libPath = path.join(projectRoot, "node_modules", "typescript", "lib", fileName);
 
-      for (var _i2 = 0, _arr2 = [fsPath, libPath]; _i2 < _arr2.length; _i2++) {
-        var filepath = _arr2[_i2];
-        if (fs.existsSync(filepath)) return fs.readFileSync(filepath, {
-          encoding: "utf-8"
-        });
+      if (fileName.startsWith("/lib")) {
+        var tsLibName = __webpack_require__.ab + "lib/" + fileName.replace("/", "");
+        return nodeSys.readFile(tsLibName);
       }
 
-      return undefined;
+      return nodeSys.readFile(fileName);
     }),
     resolvePath: function resolvePath(path) {
-      return path;
+      if (files.has(path)) return path;
+      return nodeSys.resolvePath(path);
     },
     newLine: "\n",
     useCaseSensitiveFileNames: true,
@@ -8412,6 +8448,69 @@ module.exports = parse;
 
 /***/ }),
 
+/***/ 580:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.downloadTypeScriptVersions = void 0;
+const child_process_1 = __webpack_require__(129);
+const fs_1 = __webpack_require__(747);
+const node_fetch_1 = __importDefault(__webpack_require__(454));
+const path_1 = __webpack_require__(622);
+// Fills ./dist/ts with the last 5 major-min releases of TypeScript
+exports.downloadTypeScriptVersions = async () => {
+    const releases = await downloadReleases();
+    const usableReleases = reduceToMajMin(releases);
+    const mostRecentFive = usableReleases.sort().reverse().slice(0, 5);
+    console.log('Grabbing at: ', mostRecentFive);
+    for (const version of mostRecentFive) {
+        downloadTSVersion(version);
+        extractTSVersion(version);
+    }
+};
+const extractTSVersion = (version) => {
+    const zip = __webpack_require__.ab + "ts-zips/" + version + '.tgz';
+    const toFolder = path_1.join(zip, '..', '..', 'ts');
+    if (!fs_1.existsSync(toFolder))
+        fs_1.mkdirSync(toFolder);
+    child_process_1.execSync(`tar zxf ${zip} --directory ${toFolder}`);
+    // This goes to ./dist/ts/package - so rename to ./dist/ts/3.7.4
+    child_process_1.execSync(`mv ${toFolder}/package ${toFolder}/${version}`);
+};
+const downloadTSVersion = (version) => {
+    const url = `https://registry.npmjs.org/typescript/-/typescript-${version}.tgz`;
+    const zips = __webpack_require__.ab + "ts-zips";
+    if (!fs_1.existsSync(__webpack_require__.ab + "ts-zips"))
+        fs_1.mkdirSync(__webpack_require__.ab + "ts-zips");
+    const toFile = __webpack_require__.ab + "ts-zips/" + version + '.tgz';
+    child_process_1.execSync(`curl ${url} > ${toFile}`);
+};
+// Grab the versions the playground uses
+const downloadReleases = async () => {
+    const response = await node_fetch_1.default('https://typescript.azureedge.net/indexes/releases.json');
+    const releases = await response.json();
+    return releases.versions;
+};
+// Get the highest maj/min ignoring patch versions
+const reduceToMajMin = (versions) => {
+    const latestMajMin = new Map();
+    versions.forEach(v => {
+        const majMin = v.split('.')[0] + '.' + v.split('.')[1];
+        if (!latestMajMin.has(majMin)) {
+            latestMajMin.set(majMin, v);
+        }
+    });
+    return [...latestMajMin.values()];
+};
+
+
+/***/ }),
+
 /***/ 605:
 /***/ (function(module) {
 
@@ -11219,7 +11318,7 @@ exports.withCustomRequest = withCustomRequest;
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
-function e(){return(e=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var i in r)Object.prototype.hasOwnProperty.call(r,i)&&(e[i]=r[i])}return e}).apply(this,arguments)}Object.defineProperty(exports,"__esModule",{value:!0});var t=!1;try{t="undefined"!=typeof localStorage}catch(e){}var r="undefined"!=typeof process,i=t&&localStorage.getItem("DEBUG")||r&&process.env.DEBUG?console.log:function(e){return""},n=function(e,t){var r,i=e.lib||[],n=["lib.d.ts","lib.dom.d.ts","lib.dom.iterable.d.ts","lib.webworker.d.ts","lib.webworker.importscripts.d.ts","lib.scripthost.d.ts","lib.es5.d.ts","lib.es6.d.ts","lib.es2015.collection.d.ts","lib.es2015.core.d.ts","lib.es2015.d.ts","lib.es2015.generator.d.ts","lib.es2015.iterable.d.ts","lib.es2015.promise.d.ts","lib.es2015.proxy.d.ts","lib.es2015.reflect.d.ts","lib.es2015.symbol.d.ts","lib.es2015.symbol.wellknown.d.ts","lib.es2016.array.include.d.ts","lib.es2016.d.ts","lib.es2016.full.d.ts","lib.es2017.d.ts","lib.es2017.full.d.ts","lib.es2017.intl.d.ts","lib.es2017.object.d.ts","lib.es2017.sharedmemory.d.ts","lib.es2017.string.d.ts","lib.es2017.typedarrays.d.ts","lib.es2018.asyncgenerator.d.ts","lib.es2018.asynciterable.d.ts","lib.es2018.d.ts","lib.es2018.full.d.ts","lib.es2018.intl.d.ts","lib.es2018.promise.d.ts","lib.es2018.regexp.d.ts","lib.es2019.array.d.ts","lib.es2019.d.ts","lib.es2019.full.d.ts","lib.es2019.object.d.ts","lib.es2019.string.d.ts","lib.es2019.symbol.d.ts","lib.es2020.d.ts","lib.es2020.full.d.ts","lib.es2020.string.d.ts","lib.es2020.symbol.wellknown.d.ts","lib.es2020.bigint.d.ts","lib.es2020.promise.d.ts","lib.es2020.intl.d.ts","lib.esnext.array.d.ts","lib.esnext.asynciterable.d.ts","lib.esnext.bigint.d.ts","lib.esnext.d.ts","lib.esnext.full.d.ts","lib.esnext.intl.d.ts","lib.esnext.symbol.d.ts"],s=t.ScriptTarget[e.target||t.ScriptTarget.ES5],o=n.filter((function(e){return e.startsWith("lib."+s.toLowerCase())})),u=n.indexOf(o.pop()),l=((r=i.map((function(e){var t=n.filter((function(t){return t.startsWith("lib."+e.toLowerCase())}));return 0===t.length?0:n.indexOf(t.pop())})))&&r.length?r.reduce((function(e,t){return t>e?t:e})):void 0)||0,a=Math.max(u,l);return n.slice(0,a+1)},s=function(e,t){var r=__webpack_require__(622),i=__webpack_require__(747);(function e(t){var n=[];return i.readdirSync(t).forEach((function(s){s=r.join(t,s);var o=i.statSync(s);o&&o.isDirectory()?n=n.concat(e(s)):n.push(s)})),n})(t).forEach((function(n){var s="/node_modules/@types"+n.replace(t,""),o=i.readFileSync(n,"utf8");[".ts",".tsx"].includes(r.extname(s))&&e.set(s,o)}))};function o(e){throw new Error("Method '"+e+"' is not implemented.")}function u(e,t){return function(){for(var r=arguments.length,n=new Array(r),s=0;s<r;s++)n[s]=arguments[s];var o=t.apply(void 0,n),u="string"==typeof o?o.slice(0,80)+"...":o;return i.apply(void 0,["> "+e].concat(n)),i("< "+u),o}}var l=function(t){return e({},t.getDefaultCompilerOptions(),{jsx:t.JsxEmit.React,strict:!0,esModuleInterop:!0,module:t.ModuleKind.ESNext,suppressOutputPathCheck:!0,skipLibCheck:!0,skipDefaultLibCheck:!0,moduleResolution:t.ModuleResolutionKind.NodeJs})},a=function(e){return e.replace("/","/lib.").toLowerCase()};function c(t,r,i){var n=new Map;return{compilerHost:e({},t,{getCanonicalFileName:function(e){return e},getDefaultLibFileName:function(){return"/"+i.getDefaultLibFileName(r)},getDirectories:function(){return[]},getNewLine:function(){return t.newLine},getSourceFile:function(e){return n.get(e)||(s=i.createSourceFile(e,t.readFile(e),r.target||l(i).target,!1),n.set(s.fileName,s),s);var s},useCaseSensitiveFileNames:function(){return t.useCaseSensitiveFileNames}}),updateFile:function(e){var r=n.has(e.fileName);return t.writeFile(e.fileName,e.text),n.set(e.fileName,e),r}}}function f(t,r,i,n,s){var o=[].concat(r),u=c(t,i,n),l=u.compilerHost,a=u.updateFile,f=new Map,d=0;return{languageServiceHost:e({},l,{getProjectVersion:function(){return d.toString()},getCompilationSettings:function(){return i},getCustomTransformers:function(){return s},getScriptFileNames:function(){return o},getScriptSnapshot:function(e){var r=t.readFile(e);if(r)return n.ScriptSnapshot.fromString(r)},getScriptVersion:function(e){return f.get(e)||"0"},writeFile:t.writeFile}),updateFile:function(e){d++,f.set(e.fileName,d.toString()),o.includes(e.fileName)||o.push(e.fileName),a(e)}}}exports.addAllFilesFromFolder=s,exports.addFilesForTypesIntoFolder=function(e){return s(e,"node_modules/@types")},exports.createDefaultMapFromCDN=function(e,t,r,i,s,o,u){var l=o||fetch,a=u||localStorage,c=new Map,f=n(e,i),d="https://typescript.azureedge.net/cdn/"+t+"/typescript/lib/";return(r?function(){return Object.keys(localStorage).forEach((function(e){e.startsWith("ts-lib-")&&!e.startsWith("ts-lib-"+t)&&a.removeItem(e)})),Promise.all(f.map((function(e){var r,i="ts-lib-"+t+"-"+e,n=a.getItem(i);return n?Promise.resolve((r=n,s?s.decompressFromUTF16(r):r)):l(d+e).then((function(e){return e.text()})).then((function(e){var t;return a.setItem(i,(t=e,s?s.compressToUTF16(t):t)),e}))}))).then((function(e){e.forEach((function(e,t){c.set("/"+f[t],e)}))}))}:function(){return Promise.all(f.map((function(e){return l(d+e).then((function(e){return e.text()}))}))).then((function(e){e.forEach((function(e,t){return c.set("/"+f[t],e)}))}))})().then((function(){return c}))},exports.createDefaultMapFromNodeModules=function(e,t){var r=t||__webpack_require__(34),i=__webpack_require__(622),s=__webpack_require__(747),o=n(e,r),u=new Map;return o.forEach((function(e){u.set("/"+e,function(e){var t=__webpack_require__.ab + "lib";return s.readFileSync(__webpack_require__.ab + "lib/" + e,"utf8")}(e))})),u},exports.createFSBackedSystem=function(e,t){var r=__webpack_require__(747),i=__webpack_require__(622);return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:u("directoryExists",(function(n){return Array.from(e.keys()).some((function(e){return e.startsWith(n)}))||r.existsSync(i.join(t,n))})),exit:function(){return o("exit")},fileExists:u("fileExists",(function(n){if(e.has(n))return!0;for(var s=0,o=[i.join(t,n),i.join(t,"node_modules","typescript","lib",n)];s<o.length;s++)if(r.existsSync(o[s]))return!0;return!1})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:u("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:u("readFile",(function(n){if(e.has(n))return e.get(n);for(var s=0,o=[i.join(t,n),i.join(t,"node_modules","typescript","lib",n)];s<o.length;s++){var u=o[s];if(r.existsSync(u))return r.readFileSync(u,{encoding:"utf-8"})}})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createSystem=function(e){return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:u("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))})),exit:function(){return o("exit")},fileExists:u("fileExists",(function(t){return e.has(t)||e.has(a(t))})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:u("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:u("readFile",(function(t){return e.get(t)||e.get(a(t))})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createVirtualCompilerHost=c,exports.createVirtualLanguageServiceHost=f,exports.createVirtualTypeScriptEnvironment=function(t,r,i,n,s){void 0===n&&(n={});var o=e({},l(i),{},n),u=f(t,r,o,i,s),a=u.updateFile,d=i.createLanguageService(u.languageServiceHost),p=d.getCompilerOptionsDiagnostics();if(p.length){var g=c(t,n,i);throw new Error(i.formatDiagnostics(p,g.compilerHost))}return{sys:t,languageService:d,getSourceFile:function(e){var t;return null===(t=d.getProgram())||void 0===t?void 0:t.getSourceFile(e)},createFile:function(e,t){a(i.createSourceFile(e,t,o.target,!1))},updateFile:function(e,t,r){var n=d.getProgram().getSourceFile(e);if(!n)throw new Error("Did not find a source file for "+e);var s=n.text,o=null!=r?r:i.createTextSpan(0,s.length),u=s.slice(0,o.start)+t+s.slice(o.start+o.length),l=i.updateSourceFile(n,u,{span:o,newLength:t.length});a(l)}}},exports.knownLibFilesForCompilerOptions=n;
+function e(){return(e=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var i in r)Object.prototype.hasOwnProperty.call(r,i)&&(e[i]=r[i])}return e}).apply(this,arguments)}Object.defineProperty(exports,"__esModule",{value:!0});var t=!1;try{t="undefined"!=typeof localStorage}catch(e){}var r="undefined"!=typeof process,i=t&&localStorage.getItem("DEBUG")||r&&process.env.DEBUG?console.log:function(e){return""},n=function(e,t){var r,i=e.lib||[],n=["lib.d.ts","lib.dom.d.ts","lib.dom.iterable.d.ts","lib.webworker.d.ts","lib.webworker.importscripts.d.ts","lib.scripthost.d.ts","lib.es5.d.ts","lib.es6.d.ts","lib.es2015.collection.d.ts","lib.es2015.core.d.ts","lib.es2015.d.ts","lib.es2015.generator.d.ts","lib.es2015.iterable.d.ts","lib.es2015.promise.d.ts","lib.es2015.proxy.d.ts","lib.es2015.reflect.d.ts","lib.es2015.symbol.d.ts","lib.es2015.symbol.wellknown.d.ts","lib.es2016.array.include.d.ts","lib.es2016.d.ts","lib.es2016.full.d.ts","lib.es2017.d.ts","lib.es2017.full.d.ts","lib.es2017.intl.d.ts","lib.es2017.object.d.ts","lib.es2017.sharedmemory.d.ts","lib.es2017.string.d.ts","lib.es2017.typedarrays.d.ts","lib.es2018.asyncgenerator.d.ts","lib.es2018.asynciterable.d.ts","lib.es2018.d.ts","lib.es2018.full.d.ts","lib.es2018.intl.d.ts","lib.es2018.promise.d.ts","lib.es2018.regexp.d.ts","lib.es2019.array.d.ts","lib.es2019.d.ts","lib.es2019.full.d.ts","lib.es2019.object.d.ts","lib.es2019.string.d.ts","lib.es2019.symbol.d.ts","lib.es2020.d.ts","lib.es2020.full.d.ts","lib.es2020.string.d.ts","lib.es2020.symbol.wellknown.d.ts","lib.es2020.bigint.d.ts","lib.es2020.promise.d.ts","lib.es2020.intl.d.ts","lib.esnext.array.d.ts","lib.esnext.asynciterable.d.ts","lib.esnext.bigint.d.ts","lib.esnext.d.ts","lib.esnext.full.d.ts","lib.esnext.intl.d.ts","lib.esnext.symbol.d.ts"],s=t.ScriptTarget[e.target||t.ScriptTarget.ES5],o=n.filter((function(e){return e.startsWith("lib."+s.toLowerCase())})),l=n.indexOf(o.pop()),u=((r=i.map((function(e){var t=n.filter((function(t){return t.startsWith("lib."+e.toLowerCase())}));return 0===t.length?0:n.indexOf(t.pop())})))&&r.length?r.reduce((function(e,t){return t>e?t:e})):void 0)||0,a=Math.max(l,u);return n.slice(0,a+1)},s=function(e,t){var r=__webpack_require__(622),i=__webpack_require__(747);(function e(t){var n=[];return i.readdirSync(t).forEach((function(s){s=r.join(t,s);var o=i.statSync(s);o&&o.isDirectory()?n=n.concat(e(s)):n.push(s)})),n})(t).forEach((function(n){var s="/node_modules/@types"+n.replace(t,""),o=i.readFileSync(n,"utf8");[".ts",".tsx"].includes(r.extname(s))&&e.set(s,o)}))};function o(e){throw new Error("Method '"+e+"' is not implemented.")}function l(e,t){return function(){for(var r=arguments.length,n=new Array(r),s=0;s<r;s++)n[s]=arguments[s];var o=t.apply(void 0,n),l="string"==typeof o?o.slice(0,80)+"...":o;return i.apply(void 0,["> "+e].concat(n)),i("< "+l),o}}var u=function(t){return e({},t.getDefaultCompilerOptions(),{jsx:t.JsxEmit.React,strict:!0,esModuleInterop:!0,module:t.ModuleKind.ESNext,suppressOutputPathCheck:!0,skipLibCheck:!0,skipDefaultLibCheck:!0,moduleResolution:t.ModuleResolutionKind.NodeJs})},a=function(e){return e.replace("/","/lib.").toLowerCase()};function c(t,r,i){var n=new Map;return{compilerHost:e({},t,{getCanonicalFileName:function(e){return e},getDefaultLibFileName:function(){return"/"+i.getDefaultLibFileName(r)},getDirectories:function(){return[]},getNewLine:function(){return t.newLine},getSourceFile:function(e){return n.get(e)||(s=i.createSourceFile(e,t.readFile(e),r.target||u(i).target,!1),n.set(s.fileName,s),s);var s},useCaseSensitiveFileNames:function(){return t.useCaseSensitiveFileNames}}),updateFile:function(e){var r=n.has(e.fileName);return t.writeFile(e.fileName,e.text),n.set(e.fileName,e),r}}}function f(t,r,i,n,s){var o=[].concat(r),l=c(t,i,n),u=l.compilerHost,a=l.updateFile,f=new Map,d=0;return{languageServiceHost:e({},u,{getProjectVersion:function(){return d.toString()},getCompilationSettings:function(){return i},getCustomTransformers:function(){return s},getScriptFileNames:function(){return o},getScriptSnapshot:function(e){var r=t.readFile(e);if(r)return n.ScriptSnapshot.fromString(r)},getScriptVersion:function(e){return f.get(e)||"0"},writeFile:t.writeFile}),updateFile:function(e){d++,f.set(e.fileName,d.toString()),o.includes(e.fileName)||o.push(e.fileName),a(e)}}}exports.addAllFilesFromFolder=s,exports.addFilesForTypesIntoFolder=function(e){return s(e,"node_modules/@types")},exports.createDefaultMapFromCDN=function(e,t,r,i,s,o,l){var u=o||fetch,a=l||localStorage,c=new Map,f=n(e,i),d="https://typescript.azureedge.net/cdn/"+t+"/typescript/lib/";return(r?function(){return Object.keys(localStorage).forEach((function(e){e.startsWith("ts-lib-")&&!e.startsWith("ts-lib-"+t)&&a.removeItem(e)})),Promise.all(f.map((function(e){var r,i="ts-lib-"+t+"-"+e,n=a.getItem(i);return n?Promise.resolve((r=n,s?s.decompressFromUTF16(r):r)):u(d+e).then((function(e){return e.text()})).then((function(e){var t;return a.setItem(i,(t=e,s?s.compressToUTF16(t):t)),e}))}))).then((function(e){e.forEach((function(e,t){c.set("/"+f[t],e)}))}))}:function(){return Promise.all(f.map((function(e){return u(d+e).then((function(e){return e.text()}))}))).then((function(e){e.forEach((function(e,t){return c.set("/"+f[t],e)}))}))})().then((function(){return c}))},exports.createDefaultMapFromNodeModules=function(e,t){var r=t||__webpack_require__(34),i=__webpack_require__(622),s=__webpack_require__(747),o=n(e,r),l=new Map;return o.forEach((function(e){l.set("/"+e,function(e){var t=__webpack_require__.ab + "lib";return s.readFileSync(__webpack_require__.ab + "lib/" + e,"utf8")}(e))})),l},exports.createFSBackedSystem=function(e,t,r){var i=t+"/vfs",n=__webpack_require__(622),s=r.sys,u=__webpack_require__.ab + "lib";return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:l("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))||s.directoryExists(t)})),exit:s.exit,fileExists:l("fileExists",(function(t){if(e.has(t))return!0;if(t.includes("tsconfig.json")||t.includes("tsconfig.json"))return!1;if(t.startsWith("/lib")){var r=__webpack_require__.ab + "lib/" + t.replace("/","");return s.fileExists(r)}return s.fileExists(t)})),getCurrentDirectory:function(){return i},getDirectories:s.getDirectories,getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:l("readDirectory",(function(){return"/"===(arguments.length<=0?void 0:arguments[0])?Array.from(e.keys()):s.readDirectory.apply(s,arguments)})),readFile:l("readFile",(function(t){if(e.has(t))return e.get(t);if(t.startsWith("/lib")){var r=__webpack_require__.ab + "lib/" + t.replace("/","");return s.readFile(r)}return s.readFile(t)})),resolvePath:function(t){return e.has(t)?t:s.resolvePath(t)},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createSystem=function(e){return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:l("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))})),exit:function(){return o("exit")},fileExists:l("fileExists",(function(t){return e.has(t)||e.has(a(t))})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:l("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:l("readFile",(function(t){return e.get(t)||e.get(a(t))})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createVirtualCompilerHost=c,exports.createVirtualLanguageServiceHost=f,exports.createVirtualTypeScriptEnvironment=function(t,r,i,n,s){void 0===n&&(n={});var o=e({},u(i),{},n),l=f(t,r,o,i,s),a=l.updateFile,d=i.createLanguageService(l.languageServiceHost),p=d.getCompilerOptionsDiagnostics();if(p.length){var g=c(t,n,i);throw new Error(i.formatDiagnostics(p,g.compilerHost))}return{sys:t,languageService:d,getSourceFile:function(e){var t;return null===(t=d.getProgram())||void 0===t?void 0:t.getSourceFile(e)},createFile:function(e,t){a(i.createSourceFile(e,t,o.target,!1))},updateFile:function(e,t,r){var n=d.getProgram().getSourceFile(e);if(!n)throw new Error("Did not find a source file for "+e);var s=n.text,o=null!=r?r:i.createTextSpan(0,s.length),l=s.slice(0,o.start)+t+s.slice(o.start+o.length),u=i.updateSourceFile(n,l,{span:o,newLength:t.length});a(u)}}},exports.knownLibFilesForCompilerOptions=n;
 //# sourceMappingURL=vfs.cjs.production.min.js.map
 
 

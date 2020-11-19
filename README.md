@@ -3,6 +3,7 @@
 
 Runs as a part of a nightly task in GitHub's CI. This action will:
 
+- Download the last 5 major releases of TypeScript
 - Looks through all issues which have a specific label (default: `"Has Repro"`)
 - Uses extracts code samples in the issue from markdown in the body and comments (codeblocks with `repro`)
 - Loops through the code samples with 

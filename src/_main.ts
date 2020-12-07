@@ -27,6 +27,8 @@ async function run() {
     await updateIssue(ctx, issue, results, api)
   }
 }
+process.stdout.write('.')
+
 
 process.on('unhandledRejection', error => {
   console.error('Error', error)

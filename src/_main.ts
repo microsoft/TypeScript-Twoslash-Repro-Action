@@ -29,7 +29,6 @@ async function run() {
 }
 process.stdout.write('.')
 
-
 process.on('unhandledRejection', error => {
   console.error('Error', error)
   process.exitCode = 1

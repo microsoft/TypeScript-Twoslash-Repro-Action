@@ -63,7 +63,7 @@ export const runTwoSlash = (label: string) => (
   const typeScripts = ['/home/runner/work/TypeScript/TypeScript/node_modules/typescript']
   const t = typeScripts.find(tpath => existsSync(tpath)) || 'typescript'
 
-  const tsModule = typeof ts === "object" ? ts : require(t)
+  const tsModule = typeof ts === 'object' ? ts : require(t)
 
   try {
     const opts = {noErrorValidation: true, noStaticSemanticInfo: true}

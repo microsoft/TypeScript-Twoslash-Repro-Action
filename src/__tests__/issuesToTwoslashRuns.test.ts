@@ -1,6 +1,7 @@
 import {issueToTwoslashRun} from '../issuesToTwoslashRuns'
 import {Issue} from '../getIssues'
 import {Context} from '../getContext'
+import {issueFixture} from "./fixtures/issue41617"
 
 const testCtx: Context = {
   label: 'repro',
@@ -75,4 +76,17 @@ test('handles getting a code sample out of comments', async () => {
   const input = issueToTwoslashRun(testCtx)(issueWithBodyAndComments)
   // 2 in body, 1 in comment
   expect(input.codeBlocksToRun.length).toEqual(3)
+})
+
+
+test('handles the right names', async () => {
+  const input = issueToTwoslashRun(testCtx)(issueFixture)
+  // 1 in body, 1 in comment
+  expect(input.codeBlocksToRun.length).toEqual(2)
+
+  const body = input.codeBlocksToRun[0]
+  const comment = input.codeBlocksToRun[1]
+
+  expect(body.description).toEqual("<a href='#issue-747830259'>Issue body</a> code block by @Igorbek")
+  expect(comment.description).toEqual("<a href='https://github.com/microsoft/TypeScript/issues/41617#issuecomment-738957284'>Comment</a> by @weswigham</a>")
 })

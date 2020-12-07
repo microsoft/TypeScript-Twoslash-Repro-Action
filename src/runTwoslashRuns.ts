@@ -26,7 +26,7 @@ export type TwoslashResults = {
 
 export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResults[] {
   const oldResults = getPreviousRunInfo(issue)
-  let latestRuns = runs.codeBlocksToRun.map(runTwoSlash('Nightly'))
+  let latestRuns = runs.codeBlocksToRun.map(run => runTwoSlash('Nightly')(run))
 
   if (!oldResults) {
     // TODO: Fix d.ts for flat
@@ -63,7 +63,7 @@ export const runTwoSlash = (label: string) => (
   const typeScripts = ['/home/runner/work/TypeScript/TypeScript/node_modules/typescript']
   const t = typeScripts.find(tpath => existsSync(tpath)) || 'typescript'
 
-  const tsModule = ts || require(t)
+  const tsModule = typeof ts === 'object' ? ts : require(t)
 
   try {
     const opts = {noErrorValidation: true, noStaticSemanticInfo: true}

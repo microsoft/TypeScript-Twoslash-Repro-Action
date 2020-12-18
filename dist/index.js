@@ -1303,6 +1303,7 @@ async function run() {
         await updatesIssue_1.updateIssue(ctx, issue, results, api);
     }
 }
+process.stdout.write('.');
 process.on('unhandledRejection', error => {
     console.error('Error', error);
     process.exitCode = 1;
@@ -1329,7 +1330,7 @@ exports.createAPI = void 0;
 const github_1 = __webpack_require__(469);
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`;
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`;
-exports.createAPI = (ctx) => {
+const createAPI = (ctx) => {
     const octokit = github_1.getOctokit(ctx.token);
     return {
         editOrCreateComment: async (issueID, commentID, body) => {
@@ -1344,6 +1345,7 @@ exports.createAPI = (ctx) => {
         }
     };
 };
+exports.createAPI = createAPI;
 
 
 /***/ }),
@@ -3761,7 +3763,7 @@ const path_1 = __webpack_require__(622);
 const getPreviousRunInfo_1 = __webpack_require__(707);
 function runTwoslashRuns(issue, runs) {
     const oldResults = getPreviousRunInfo_1.getPreviousRunInfo(issue);
-    let latestRuns = runs.codeBlocksToRun.map(exports.runTwoSlash('Nightly'));
+    let latestRuns = runs.codeBlocksToRun.map(run => exports.runTwoSlash('Nightly')(run));
     if (!oldResults) {
         // TODO: Fix d.ts for flat
         const olderRuns = runs.codeBlocksToRun.map(exports.runTwoSlashOnOlderVersions).flat();
@@ -3773,7 +3775,7 @@ function runTwoslashRuns(issue, runs) {
     }
 }
 exports.runTwoslashRuns = runTwoslashRuns;
-exports.runTwoSlashOnOlderVersions = (run) => {
+const runTwoSlashOnOlderVersions = (run) => {
     //                       dev                                  prod
     const possibleTSRoots = [path_1.join(__dirname, '..', 'dist', 'ts'), path_1.join(__dirname, 'ts')];
     const tsRoot = possibleTSRoots.find(f => fs_1.existsSync(f));
@@ -3783,16 +3785,17 @@ exports.runTwoSlashOnOlderVersions = (run) => {
         return exports.runTwoSlash(tsVersion)(run, ts);
     });
 };
+exports.runTwoSlashOnOlderVersions = runTwoSlashOnOlderVersions;
 // TODO: Timeouts?
 //
-exports.runTwoSlash = (label) => (run, ts) => {
+const runTwoSlash = (label) => (run, ts) => {
     let result;
     const start = new Date();
     const getTime = () => Math.round(new Date().getTime() - start.getTime());
     // TypeScript dep needs to be looked up by the workflow define parts of the FS first
     const typeScripts = ['/home/runner/work/TypeScript/TypeScript/node_modules/typescript'];
     const t = typeScripts.find(tpath => fs_1.existsSync(tpath)) || 'typescript';
-    const tsModule = ts || require(t);
+    const tsModule = typeof ts === 'object' ? ts : require(t);
     try {
         const opts = { noErrorValidation: true, noStaticSemanticInfo: true };
         result = twoslash_1.twoslasher(run.block.content, run.block.lang, { defaultOptions: opts, tsModule });
@@ -3830,6 +3833,7 @@ exports.runTwoSlash = (label) => (run, ts) => {
         delete returnResults['emit'];
     return returnResults;
 };
+exports.runTwoSlash = runTwoSlash;
 
 
 /***/ }),
@@ -3841,7 +3845,7 @@ exports.runTwoSlash = (label) => (run, ts) => {
 
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.markdownToCodeBlocks = void 0;
-exports.markdownToCodeBlocks = (md) => {
+const markdownToCodeBlocks = (md) => {
     const codeBlocks = md.split('```');
     if (codeBlocks.length === 1)
         return [];
@@ -3864,6 +3868,7 @@ exports.markdownToCodeBlocks = (md) => {
     });
     return blocks;
 };
+exports.markdownToCodeBlocks = markdownToCodeBlocks;
 
 
 /***/ }),
@@ -7462,7 +7467,7 @@ module.exports = resolveCommand;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getContext = void 0;
 const core_1 = __webpack_require__(470);
-exports.getContext = () => {
+const getContext = () => {
     const token = core_1.getInput('github-token');
     const repo = core_1.getInput('repo') || process.env.GITHUB_REPOSITORY;
     const label = core_1.getInput('label');
@@ -7478,6 +7483,7 @@ exports.getContext = () => {
     };
     return ctx;
 };
+exports.getContext = getContext;
 
 
 /***/ }),
@@ -8463,7 +8469,7 @@ const fs_1 = __webpack_require__(747);
 const node_fetch_1 = __importDefault(__webpack_require__(454));
 const path_1 = __webpack_require__(622);
 // Fills ./dist/ts with the last 5 major-min releases of TypeScript
-exports.downloadTypeScriptVersions = async () => {
+const downloadTypeScriptVersions = async () => {
     const releases = await downloadReleases();
     const usableReleases = reduceToMajMin(releases);
     const mostRecentFive = usableReleases.sort().reverse().slice(0, 5);
@@ -8473,6 +8479,7 @@ exports.downloadTypeScriptVersions = async () => {
         extractTSVersion(version);
     }
 };
+exports.downloadTypeScriptVersions = downloadTypeScriptVersions;
 const extractTSVersion = (version) => {
     const zip = __webpack_require__.ab + "ts-zips/" + version + '.tgz';
     const toFolder = path_1.join(zip, '..', '..', 'ts');
@@ -9310,12 +9317,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.makeMessageForMainRuns = exports.updateIssue = void 0;
 const getPreviousRunInfo_1 = __webpack_require__(707);
 const getTypeScriptMeta_1 = __webpack_require__(772);
-exports.updateIssue = async (_ctx, issue, newRuns, api) => {
+const updateIssue = async (_ctx, issue, newRuns, api) => {
     process.stdout.write(`\nUpdating issue ${issue.number}: `);
     if (newRuns.length === 0)
         return;
     await updateMainComment(newRuns, api, issue);
 };
+exports.updateIssue = updateIssue;
 async function updateMainComment(newRuns, api, issue) {
     const nightlyNew = getLatest(newRuns);
     const runInfo = getPreviousRunInfo_1.getPreviousRunInfo(issue);
@@ -9339,7 +9347,7 @@ const intro = (runLength) => {
     return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript. If something changes, I will post a new comment.<hr />`;
 };
 /** Above the fold */
-exports.makeMessageForMainRuns = (newLatestRuns) => {
+const makeMessageForMainRuns = (newLatestRuns) => {
     const groupedBySource = groupBy(newLatestRuns, ts => ts.commentID || '__body');
     const sources = Object.keys(groupedBySource).sort().reverse();
     const inner = sources.map(source => {
@@ -9350,6 +9358,7 @@ exports.makeMessageForMainRuns = (newLatestRuns) => {
     });
     return inner.join('\n\n');
 };
+exports.makeMessageForMainRuns = makeMessageForMainRuns;
 /** Makes the "Historical" section at the end of an issue */
 const makeMessageForOlderRuns = (runsBySource) => {
     // Sources are the issue body, or comments etc
@@ -9446,7 +9455,7 @@ const getLatest = (runs) => runs.filter(r => r.label === 'Nightly');
 
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runInfoString = exports.getPreviousRunInfo = void 0;
-exports.getPreviousRunInfo = (issue) => {
+const getPreviousRunInfo = (issue) => {
     const botComment = issue.comments.nodes.filter(c => c.body.includes('<!--- TypeScriptBot')).pop();
     if (!botComment)
         return undefined;
@@ -9461,9 +9470,11 @@ exports.getPreviousRunInfo = (issue) => {
         return undefined;
     }
 };
-exports.runInfoString = (run) => {
+exports.getPreviousRunInfo = getPreviousRunInfo;
+const runInfoString = (run) => {
     return `<!--- TypeScriptBot %%% ${JSON.stringify(run)} %%% --->`;
 };
+exports.runInfoString = runInfoString;
 
 
 /***/ }),
@@ -9762,7 +9773,7 @@ exports.getTypeScriptMeta = void 0;
 const path_1 = __webpack_require__(622);
 const fs_1 = __webpack_require__(747);
 const node_fetch_1 = __importDefault(__webpack_require__(454));
-exports.getTypeScriptMeta = async () => {
+const getTypeScriptMeta = async () => {
     const pkgPath = __webpack_require__.ab + "package.json";
     const pkgJSON = JSON.parse(fs_1.readFileSync(__webpack_require__.ab + "package.json", "utf8"));
     const version = pkgJSON.version;
@@ -9773,6 +9784,7 @@ exports.getTypeScriptMeta = async () => {
         sha: res.gitHead
     };
 };
+exports.getTypeScriptMeta = getTypeScriptMeta;
 
 
 /***/ }),
@@ -12036,7 +12048,7 @@ function onceStrict (fn) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.issueToTwoslashRun = void 0;
 const markdownToCodeBlocks_1 = __webpack_require__(320);
-exports.issueToTwoslashRun = (ctx) => (issue) => {
+const issueToTwoslashRun = (ctx) => (issue) => {
     // Body -> CodeBlocks
     const bodyCode = markdownToCodeBlocks_1.markdownToCodeBlocks(issue.body);
     const codeBlocks = bodyCode.filter(validCodeblocks(ctx.tag)).map((c, i) => ({
@@ -12047,7 +12059,7 @@ exports.issueToTwoslashRun = (ctx) => (issue) => {
     const commentCodeBlocks = issue.comments.nodes.map(c => ({
         twoslashRuns: markdownToCodeBlocks_1.markdownToCodeBlocks(c.body).filter(validCodeblocks(ctx.tag)),
         commentID: c.id,
-        description: `<a href='${c.url}'>Comment</a> by @${issue.author.login}</a>`
+        description: `<a href='${c.url}'>Comment</a> by @${c.author.login}</a>`
     }));
     // Flatten to Comment -> CodeBlock
     //            Comment -> CodeBlock
@@ -12065,6 +12077,7 @@ exports.issueToTwoslashRun = (ctx) => (issue) => {
         codeBlocksToRun: codeBlocks
     };
 };
+exports.issueToTwoslashRun = issueToTwoslashRun;
 const validCodeblocks = (tag) => (codeBlock) => codeBlock.tags.includes(tag);
 
 

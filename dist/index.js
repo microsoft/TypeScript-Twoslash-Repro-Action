@@ -1330,6 +1330,13 @@ exports.createAPI = void 0;
 const github_1 = __webpack_require__(469);
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`;
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`;
+const getComment = `query GetComment ($commentID: ID!) {
+  node(id: $commentID) {
+    ... on Comment {
+      body
+    }
+  }
+}`;
 const createAPI = (ctx) => {
     const octokit = github_1.getOctokit(ctx.token);
     return {
@@ -1337,7 +1344,13 @@ const createAPI = (ctx) => {
             // https://regex101.com/r/ZORaaK/1
             const sanitizedBody = body.replace(/home\/runner\/work\/TypeScript-Twoslash-Repro-Action\/TypeScript-Twoslash-Repro-Action\/dist/g, "[root]");
             if (commentID) {
-                await octokit.graphql(editComment, { input: { id: commentID, body: sanitizedBody } });
+                const commentReq = await octokit.graphql(getComment, { commentID });
+                const commentBody = commentReq.node.body;
+                // TODO: Remove
+                console.log(commentBody);
+                if (commentBody !== sanitizedBody) {
+                    await octokit.graphql(editComment, { input: { id: commentID, body: sanitizedBody } });
+                }
             }
             else {
                 await octokit.graphql(addComment, { input: { subjectId: issueID, body: sanitizedBody } });
@@ -9344,7 +9357,7 @@ async function updateMainComment(newRuns, api, issue) {
 const intro = (runLength) => {
     const repros = runLength === 1 ? 'repro' : `${runLength} repros`;
     const docsLink = 'https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md';
-    return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript. If something changes, I will post a new comment.<hr />`;
+    return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript.<hr />`;
 };
 /** Above the fold */
 const makeMessageForMainRuns = (newLatestRuns) => {

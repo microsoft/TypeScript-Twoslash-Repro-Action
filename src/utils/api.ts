@@ -3,6 +3,13 @@ import {Context} from '../getContext'
 
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`
+const getComment = `query GetComment ($commentID: ID!) {
+  node(id: $commentID) {
+    ... on Comment {
+      body
+    }
+  }
+}`
 
 export type API = ReturnType<typeof createAPI>
 
@@ -14,7 +21,13 @@ export const createAPI = (ctx: Context) => {
       // https://regex101.com/r/ZORaaK/1
       const sanitizedBody = body.replace(/home\/runner\/work\/TypeScript-Twoslash-Repro-Action\/TypeScript-Twoslash-Repro-Action\/dist/g, "[root]")
       if (commentID) {
-        await octokit.graphql(editComment, {input: {id: commentID, body: sanitizedBody}})
+        const commentReq = await octokit.graphql<{ node: { body: string }}>(getComment, { commentID })
+        const commentBody = commentReq.node.body
+        // TODO: Remove
+        console.log(commentBody)
+        if (commentBody !== sanitizedBody) {
+          await octokit.graphql(editComment, {input: {id: commentID, body: sanitizedBody}})
+        }
       } else {
         await octokit.graphql(addComment, {input: {subjectId: issueID, body: sanitizedBody}})
       }

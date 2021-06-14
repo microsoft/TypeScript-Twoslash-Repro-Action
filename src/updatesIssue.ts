@@ -42,7 +42,7 @@ async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Is
 const intro = (runLength: number) => {
   const repros = runLength === 1 ? 'repro' : `${runLength} repros`
   const docsLink = 'https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md'
-  return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript. If something changes, I will post a new comment.<hr />`
+  return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript.<hr />`
 }
 
 /** Above the fold */

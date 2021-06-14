@@ -21,7 +21,7 @@ export type TwoslashResults = {
   label: string // e.g. 3.9.5
   description: string // e.g. Issue body by orta
   state: RunState
-  commentID?: string
+  commentID?: string | undefined
 }
 
 export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResults[] {
@@ -68,7 +68,7 @@ export const runTwoSlash = (label: string) => (
   try {
     const opts = {noErrorValidation: true, noStaticSemanticInfo: true}
     result = twoslasher(run.block.content, run.block.lang, {defaultOptions: opts, tsModule})
-  } catch (error) {
+  } catch (error: any) {
     return {
       assertions: [],
       fails: [],

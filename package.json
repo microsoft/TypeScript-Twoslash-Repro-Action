@@ -26,7 +26,9 @@
   "dependencies": {
     "@actions/core": "^1.2.0",
     "@actions/github": "^4.0.0",
+    "@types/diff": "^5.0.1",
     "@typescript/twoslash": "^1.1.1",
+    "diff": "^5.0.0",
     "node-fetch": "^2.6.0"
   },
   "devDependencies": {

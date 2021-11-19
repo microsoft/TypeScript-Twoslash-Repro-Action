@@ -1,5 +1,6 @@
 import {getOctokit} from '@actions/github'
 import {Context} from '../getContext'
+import {diffLines} from "diff"
 
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`
@@ -23,9 +24,8 @@ export const createAPI = (ctx: Context) => {
       if (commentID) {
         const commentReq = await octokit.graphql<{ node: { body: string }}>(getComment, { commentID })
         const commentBody = commentReq.node.body
-        // TODO: Remove
-        console.log(commentBody)
         if (commentBody !== sanitizedBody) {
+          console.log(diffLines(commentBody, sanitizedBody))
           await octokit.graphql(editComment, {input: {id: commentID, body: sanitizedBody}})
         }
       } else {

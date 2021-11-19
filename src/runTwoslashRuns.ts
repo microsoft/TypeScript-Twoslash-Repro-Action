@@ -38,6 +38,13 @@ export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResult
   }
 }
 
+export const requireTS = (version: string) => {
+  //                       dev                                  prod
+  const possibleTSRoots = [join(__dirname, '..', 'dist', 'ts'), join(__dirname, 'ts')]
+  const tsRoot = possibleTSRoots.find(f => existsSync(f))!
+  return require(join(tsRoot, version))
+}
+
 export const runTwoSlashOnOlderVersions = (run: TwoslashRun['codeBlocksToRun'][number]) => {
   //                       dev                                  prod
   const possibleTSRoots = [join(__dirname, '..', 'dist', 'ts'), join(__dirname, 'ts')]

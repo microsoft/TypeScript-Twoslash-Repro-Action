@@ -2,7 +2,7 @@ import {readFileSync} from 'fs'
 import {join} from 'path'
 import {compare} from "semver"
 
-import {binarySearch, BisectVersion, extractDateAndVersionMetadata} from '../setupBisect'
+import {binarySearch, BisectVersion, extractDateAndVersionMetadata} from '../setupBreakingInfo'
 
 const examplePkg = readFileSync(join(__dirname, 'fixtures', 'typescript.json'), 'utf8')
 
@@ -17,15 +17,13 @@ it('extracts the useful metadata for bisecting', () => {
 })
 
 it('bisects with a known function for checking a version', async () => {
-    const versions = extractDateAndVersionMetadata(JSON.parse(examplePkg))
+    const versions = extractDateAndVersionMetadata(JSON.parse(examplePkg)).filter(v => v[0].includes("-dev"))
     const picker = async (v: BisectVersion) => {
-        const res =  compare(v[0], "4.5.0-dev.20210824")
-        console.log(v[1], res)
+        const res = compare("4.5.0-dev.20210824", v[0], { includePrerelease: true})
         return res
-
     }
     const results = await binarySearch(versions, picker)
-    console.log(results)
+    expect(results[0]).toEqual("4.5.0-dev.20210824")
   })
 
   

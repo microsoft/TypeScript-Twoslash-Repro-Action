@@ -2058,6 +2058,8 @@ const updatesIssue_1 = __webpack_require__(700);
 const runTwoslashRuns_1 = __webpack_require__(303);
 const api_1 = __webpack_require__(105);
 const downloadTSVersions_1 = __webpack_require__(580);
+const getPreviousRunInfo_1 = __webpack_require__(707);
+const setupBreakingInfo_1 = __webpack_require__(406);
 async function run() {
     const ctx = (0, getContext_1.getContext)();
     console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`);
@@ -2070,8 +2072,10 @@ async function run() {
             console.log('');
         const runs = (0, issuesToTwoslashRuns_1.issueToTwoslashRun)(ctx)(issue);
         const results = (0, runTwoslashRuns_1.runTwoslashRuns)(issue, runs);
+        const runInfo = (0, getPreviousRunInfo_1.getPreviousRunInfo)(issue);
+        const breakage = (runInfo && runInfo.breakageInfo) || (await (0, setupBreakingInfo_1.getBreakageInfo)(runs, results));
         const api = (0, api_1.createAPI)(ctx);
-        await (0, updatesIssue_1.updateIssue)(ctx, issue, results, api);
+        await (0, updatesIssue_1.updateIssue)(ctx, issue, results, breakage, api);
     }
 }
 process.stdout.write('.');
@@ -4195,7 +4199,7 @@ exports.paginateRest = paginateRest;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runTwoSlash = exports.runTwoSlashOnOlderVersions = exports.runTwoslashRuns = void 0;
+exports.runTwoSlash = exports.runTwoSlashOnOlderVersions = exports.requireTS = exports.runTwoslashRuns = void 0;
 const twoslash_1 = __webpack_require__(689);
 const fs_1 = __webpack_require__(747);
 const path_1 = __webpack_require__(622);
@@ -4214,6 +4218,13 @@ function runTwoslashRuns(issue, runs) {
     }
 }
 exports.runTwoslashRuns = runTwoslashRuns;
+const requireTS = (version) => {
+    //                       dev                                  prod
+    const possibleTSRoots = [(0, path_1.join)(__dirname, '..', 'dist', 'ts'), (0, path_1.join)(__dirname, 'ts')];
+    const tsRoot = possibleTSRoots.find(f => (0, fs_1.existsSync)(f));
+    return require((0, path_1.join)(tsRoot, version));
+};
+exports.requireTS = requireTS;
 const runTwoSlashOnOlderVersions = (run) => {
     //                       dev                                  prod
     const possibleTSRoots = [(0, path_1.join)(__dirname, '..', 'dist', 'ts'), (0, path_1.join)(__dirname, 'ts')];
@@ -7320,6 +7331,91 @@ exports.createVirtualLanguageServiceHost = createVirtualLanguageServiceHost;
 exports.createVirtualTypeScriptEnvironment = createVirtualTypeScriptEnvironment;
 exports.knownLibFilesForCompilerOptions = knownLibFilesForCompilerOptions;
 //# sourceMappingURL=vfs.cjs.development.js.map
+
+
+/***/ }),
+
+/***/ 406:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getBreakageInfo = exports.binarySearch = exports.extractDateAndVersionMetadata = void 0;
+const downloadTSVersions_1 = __webpack_require__(580);
+const runTwoslashRuns_1 = __webpack_require__(303);
+// Grab every version of TypeScript
+const downloadAllTSVersions = async () => {
+    const response = await fetch('http://registry.npmjs.org/typescript');
+    const json = await response.json();
+    return (0, exports.extractDateAndVersionMetadata)(json);
+};
+/** So we can have much less of that 14mb json file in memory */
+const extractDateAndVersionMetadata = (packument) => {
+    const time = packument.time;
+    delete time['modified'];
+    delete time['created'];
+    return Object.keys(time).map(key => [key, time[key]]);
+};
+exports.extractDateAndVersionMetadata = extractDateAndVersionMetadata;
+async function binarySearch(ar, func) {
+    var m = 0;
+    var n = ar.length - 1;
+    while (m <= n) {
+        var k = (n + m) >> 1;
+        var cmp = await func(ar[k]);
+        if (cmp > 0) {
+            m = k + 1;
+        }
+        else if (cmp < 0) {
+            n = k - 1;
+        }
+        else {
+            return ar[k];
+        }
+    }
+    return ar[m - 1];
+}
+exports.binarySearch = binarySearch;
+const compareResults = (run, todaysResult) => async (version) => {
+    (0, downloadTSVersions_1.ensureTSVersionExists)(version[0]);
+    const ts = (0, runTwoslashRuns_1.requireTS)(version[0]);
+    const newResults = run.codeBlocksToRun.map(code => (0, runTwoslashRuns_1.runTwoSlash)('Check for breakage')(code, ts));
+    let same = true;
+    // Look to make sure that every result from today's run include a corresponding result for yesterday's run
+    newResults.forEach(res => {
+        if (!todaysResult.some(todays => resultsSame(res, todays))) {
+            same = false;
+        }
+    });
+    return same === true ? 1 : -1;
+};
+const getBreakageInfo = async (run, results) => {
+    const latestResults = getLatest(results);
+    const allVersions = await downloadAllTSVersions();
+    const comparer = compareResults(run, latestResults);
+    const version = await binarySearch(allVersions, comparer);
+    const info = {
+        estimatedVersion: version[0],
+        estimatedDate: version[1]
+    };
+    return info;
+};
+exports.getBreakageInfo = getBreakageInfo;
+const getLatest = (runs) => runs.filter(r => r.label === 'Nightly');
+const resultsSame = (lhs, rhs) => {
+    if (lhs.description != rhs.description)
+        return false;
+    if (lhs.state != rhs.state)
+        return false;
+    if (lhs.fails != rhs.fails)
+        return false;
+    if (lhs.assertions != rhs.assertions)
+        return false;
+    if (lhs.exception != rhs.exception)
+        return false;
+    return true;
+};
 
 
 /***/ }),
@@ -11683,7 +11779,7 @@ const github_1 = __webpack_require__(469);
 async function getIssues(context) {
     const octokit = (0, github_1.getOctokit)(context.token);
     const req = issuesQuery(context.owner, context.name, context.label);
-    const initialIssues = (await octokit.graphql(req.query, Object.assign({}, req.vars)));
+    const initialIssues = (await octokit.graphql(req.query, { ...req.vars }));
     // TODO: check if nodes length == 100, then start looping
     return initialIssues.repository.issues.nodes;
 }
@@ -12794,7 +12890,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadTypeScriptVersions = void 0;
+exports.ensureTSVersionExists = exports.downloadTSVersion = exports.downloadTypeScriptVersions = void 0;
 const child_process_1 = __webpack_require__(129);
 const fs_1 = __webpack_require__(747);
 const node_fetch_1 = __importDefault(__webpack_require__(454));
@@ -12804,10 +12900,9 @@ const downloadTypeScriptVersions = async () => {
     const releases = await downloadReleases();
     const usableReleases = reduceToMajMin(releases);
     const mostRecentFive = usableReleases.sort().reverse().slice(0, 5);
-    console.log('Grabbing at: ', mostRecentFive);
+    console.log('Grabbing: ', mostRecentFive);
     for (const version of mostRecentFive) {
-        downloadTSVersion(version);
-        extractTSVersion(version);
+        (0, exports.ensureTSVersionExists)(version);
     }
 };
 exports.downloadTypeScriptVersions = downloadTypeScriptVersions;
@@ -12828,6 +12923,14 @@ const downloadTSVersion = (version) => {
     const toFile = (0, path_1.join)(zips, version + '.tgz');
     (0, child_process_1.execSync)(`curl ${url} > ${toFile}`);
 };
+exports.downloadTSVersion = downloadTSVersion;
+const ensureTSVersionExists = (version) => {
+    if ((0, fs_1.existsSync)((0, path_1.join)(__dirname, '..', 'dist', version)))
+        return;
+    (0, exports.downloadTSVersion)(version);
+    extractTSVersion(version);
+};
+exports.ensureTSVersionExists = ensureTSVersionExists;
 // Grab the versions the playground uses
 const downloadReleases = async () => {
     const response = await (0, node_fetch_1.default)('https://typescript.azureedge.net/indexes/releases.json');
@@ -14213,14 +14316,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.makeMessageForMainRuns = exports.updateIssue = void 0;
 const getPreviousRunInfo_1 = __webpack_require__(707);
 const getTypeScriptMeta_1 = __webpack_require__(772);
-const updateIssue = async (_ctx, issue, newRuns, api) => {
+const updateIssue = async (_ctx, issue, newRuns, breakage, api) => {
     process.stdout.write(`\nUpdating issue ${issue.number}: `);
     if (newRuns.length === 0)
         return;
-    await updateMainComment(newRuns, api, issue);
+    await updateMainComment(newRuns, breakage, api, issue);
 };
 exports.updateIssue = updateIssue;
-async function updateMainComment(newRuns, api, issue) {
+async function updateMainComment(newRuns, breakage, api, issue) {
     const nightlyNew = getLatest(newRuns);
     const runInfo = (0, getPreviousRunInfo_1.getPreviousRunInfo)(issue);
     const introduction = intro(nightlyNew.length);
@@ -14228,14 +14331,15 @@ async function updateMainComment(newRuns, api, issue) {
     const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body');
     const bottom = makeMessageForOlderRuns(groupedBySource);
     const newTSMeta = await (0, getTypeScriptMeta_1.getTypeScriptMeta)();
+    const commentID = runInfo && runInfo.commentID;
     const embedded = (0, getPreviousRunInfo_1.runInfoString)({
         runs: newRuns,
-        commentID: runInfo === null || runInfo === void 0 ? void 0 : runInfo.commentID,
+        commentID,
         typescriptNightlyVersion: newTSMeta.version,
         typescriptSHA: newTSMeta.sha
     });
     const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`;
-    await api.editOrCreateComment(issue.id, runInfo === null || runInfo === void 0 ? void 0 : runInfo.commentID, msg);
+    await api.editOrCreateComment(issue.id, commentID, msg);
 }
 const intro = (runLength) => {
     const repros = runLength === 1 ? 'repro' : `${runLength} repros`;
@@ -14360,7 +14464,10 @@ const getPreviousRunInfo = (issue) => {
         const json = JSON.parse(jsonString);
         if ("typescriptNightlyVersion" in json === false)
             return undefined;
-        return Object.assign(Object.assign({}, json), { commentID: botComment.id });
+        return {
+            ...json,
+            commentID: botComment.id
+        };
     }
     catch (error) {
         return undefined;

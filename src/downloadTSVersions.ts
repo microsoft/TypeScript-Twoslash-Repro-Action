@@ -39,7 +39,7 @@ export const downloadTSVersion = (version: string) => {
 
 export const ensureTSVersionExists = (version: string) => {
   if (existsSync(join(__dirname, '..', 'dist', version))) return
-  
+
   downloadTSVersion(version)
   extractTSVersion(version)
 }

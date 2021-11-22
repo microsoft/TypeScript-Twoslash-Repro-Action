@@ -18,7 +18,13 @@ export type EmbeddedTwoslashRun = {
   runs: TwoslashResults[]
 }
 
-export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: TwoslashResults[], breakage: BreakageInfo, api: API) => {
+export const updateIssue = async (
+  _ctx: Context,
+  issue: Issue,
+  newRuns: TwoslashResults[],
+  breakage: BreakageInfo,
+  api: API
+) => {
   process.stdout.write(`\nUpdating issue ${issue.number}: `)
   if (newRuns.length === 0) return
 
@@ -35,14 +41,15 @@ async function updateMainComment(newRuns: TwoslashResults[], breakage: BreakageI
   const bottom = makeMessageForOlderRuns(groupedBySource)
   const newTSMeta = await getTypeScriptMeta()
 
+  const commentID = runInfo && runInfo.commentID
   const embedded = runInfoString({
     runs: newRuns,
-    commentID: runInfo?.commentID,
+    commentID,
     typescriptNightlyVersion: newTSMeta.version,
     typescriptSHA: newTSMeta.sha
   })
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
-  await api.editOrCreateComment(issue.id, runInfo?.commentID, msg)
+  await api.editOrCreateComment(issue.id, commentID, msg)
 }
 
 const intro = (runLength: number) => {

@@ -2,6 +2,7 @@ import {downloadTypeScriptVersions, ensureTSVersionExists} from './downloadTSVer
 import {TwoslashRun} from './issuesToTwoslashRuns'
 import {requireTS, runTwoSlash, runTwoslashRuns, TwoslashResults} from './runTwoslashRuns'
 import {BreakageInfo} from './updatesIssue'
+import fetch from 'node-fetch'
 
 export type BisectVersion = [version: string, date: string]
 
@@ -63,8 +64,8 @@ export const getBreakageInfo = async (run: TwoslashRun, results: TwoslashResults
   const version = await binarySearch(allVersions, comparer)
 
   const info: BreakageInfo = {
-    estimatedVersion: version[0],
-    estimatedDate: version[1]
+    estimatedVersion: version ? version[0] : 'N/A',
+    estimatedDate: version ? version[1] : 'N/A'
   }
 
   return info

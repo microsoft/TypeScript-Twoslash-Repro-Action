@@ -7340,13 +7340,17 @@ exports.knownLibFilesForCompilerOptions = knownLibFilesForCompilerOptions;
 
 "use strict";
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getBreakageInfo = exports.binarySearch = exports.extractDateAndVersionMetadata = void 0;
 const downloadTSVersions_1 = __webpack_require__(580);
 const runTwoslashRuns_1 = __webpack_require__(303);
+const node_fetch_1 = __importDefault(__webpack_require__(454));
 // Grab every version of TypeScript
 const downloadAllTSVersions = async () => {
-    const response = await fetch('http://registry.npmjs.org/typescript');
+    const response = await (0, node_fetch_1.default)('http://registry.npmjs.org/typescript');
     const json = await response.json();
     return (0, exports.extractDateAndVersionMetadata)(json);
 };
@@ -7396,8 +7400,8 @@ const getBreakageInfo = async (run, results) => {
     const comparer = compareResults(run, latestResults);
     const version = await binarySearch(allVersions, comparer);
     const info = {
-        estimatedVersion: version[0],
-        estimatedDate: version[1]
+        estimatedVersion: version ? version[0] : "N/A",
+        estimatedDate: version ? version[1] : "N/A"
     };
     return info;
 };

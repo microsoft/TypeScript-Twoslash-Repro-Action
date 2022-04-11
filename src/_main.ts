@@ -5,6 +5,8 @@ import {updateIssue} from './updatesIssue'
 import {runTwoslashRuns} from './runTwoslashRuns'
 import {createAPI} from './utils/api'
 import {downloadTypeScriptVersions} from './downloadTSVersions'
+import {getPreviousRunInfo} from './utils/getPreviousRunInfo'
+import {getBreakageInfo} from './setupBreakingInfo'
 
 async function run() {
   const ctx = getContext()
@@ -23,8 +25,11 @@ async function run() {
 
     const results = runTwoslashRuns(issue, runs)
 
+    const runInfo = getPreviousRunInfo(issue)
+    const breakage = (runInfo && runInfo.breakageInfo) || (await getBreakageInfo(runs, results))
+
     const api = createAPI(ctx)
-    await updateIssue(ctx, issue, results, api)
+    await updateIssue(ctx, issue, results, breakage, api)
   }
 }
 process.stdout.write('.')

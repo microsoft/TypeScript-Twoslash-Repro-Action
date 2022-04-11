@@ -5,21 +5,33 @@ import {getPreviousRunInfo, runInfoString} from './utils/getPreviousRunInfo'
 import {API} from './utils/api'
 import {getTypeScriptMeta} from './utils/getTypeScriptMeta'
 
+export type BreakageInfo = {
+  estimatedVersion: string
+  estimatedDate: string
+}
+
 export type EmbeddedTwoslashRun = {
   commentID: string | undefined
   typescriptNightlyVersion: string
   typescriptSHA: string
+  breakageInfo?: BreakageInfo
   runs: TwoslashResults[]
 }
 
-export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: TwoslashResults[], api: API) => {
+export const updateIssue = async (
+  _ctx: Context,
+  issue: Issue,
+  newRuns: TwoslashResults[],
+  breakage: BreakageInfo,
+  api: API
+) => {
   process.stdout.write(`\nUpdating issue ${issue.number}: `)
   if (newRuns.length === 0) return
 
-  await updateMainComment(newRuns, api, issue)
+  await updateMainComment(newRuns, breakage, api, issue)
 }
 
-async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
+async function updateMainComment(newRuns: TwoslashResults[], breakage: BreakageInfo, api: API, issue: Issue) {
   const nightlyNew = getLatest(newRuns)
 
   const runInfo = getPreviousRunInfo(issue)
@@ -29,14 +41,15 @@ async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Is
   const bottom = makeMessageForOlderRuns(groupedBySource)
   const newTSMeta = await getTypeScriptMeta()
 
+  const commentID = runInfo && runInfo.commentID
   const embedded = runInfoString({
     runs: newRuns,
-    commentID: runInfo?.commentID,
+    commentID,
     typescriptNightlyVersion: newTSMeta.version,
     typescriptSHA: newTSMeta.sha
   })
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
-  await api.editOrCreateComment(issue.id, runInfo?.commentID, msg)
+  await api.editOrCreateComment(issue.id, commentID, msg)
 }
 
 const intro = (runLength: number) => {

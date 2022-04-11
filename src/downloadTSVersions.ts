@@ -10,11 +10,10 @@ export const downloadTypeScriptVersions = async () => {
   const usableReleases = reduceToMajMin(releases)
 
   const mostRecentFive = usableReleases.sort().reverse().slice(0, 5)
-  console.log('Grabbing at: ', mostRecentFive)
+  console.log('Grabbing: ', mostRecentFive)
 
   for (const version of mostRecentFive) {
-    downloadTSVersion(version)
-    extractTSVersion(version)
+    ensureTSVersionExists(version)
   }
 }
 
@@ -29,13 +28,20 @@ const extractTSVersion = (version: string) => {
   execSync(`mv ${toFolder}/package ${toFolder}/${version}`)
 }
 
-const downloadTSVersion = (version: string) => {
+export const downloadTSVersion = (version: string) => {
   const url = `https://registry.npmjs.org/typescript/-/typescript-${version}.tgz`
   const zips = join(__dirname, '..', 'dist', 'ts-zips')
   if (!existsSync(zips)) mkdirSync(zips)
 
   const toFile = join(zips, version + '.tgz')
   execSync(`curl ${url} > ${toFile}`)
+}
+
+export const ensureTSVersionExists = (version: string) => {
+  if (existsSync(join(__dirname, '..', 'dist', version))) return
+
+  downloadTSVersion(version)
+  extractTSVersion(version)
 }
 
 // Grab the versions the playground uses

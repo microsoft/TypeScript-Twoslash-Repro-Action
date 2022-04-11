@@ -2,7 +2,7 @@ import {runTwoSlashOnOlderVersions} from '../runTwoslashRuns'
 import {TwoslashRun} from '../issuesToTwoslashRuns'
 
 // Skip these v.slow tests on watch mode
-const isWatch = process.env.npm_config_argv!.includes('-w') || process.env.npm_config_argv!.includes('--watch')
+const isWatch = process.env.npm_config_argv?.includes('-w') || process.env.npm_config_argv?.includes('--watch')
 const maybeTest = isWatch ? test.skip : test
 
 maybeTest('runs code against the older TS versions', () => {

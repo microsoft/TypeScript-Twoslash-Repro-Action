@@ -1,7 +1,7 @@
 import {runTwoSlash} from '../runTwoslashRuns'
 import {TwoslashRun} from '../issuesToTwoslashRuns'
 
-const isWatch = process.env.npm_config_argv!.includes('-w') || process.env.npm_config_argv!.includes('--watch')
+const isWatch = process.env.npm_config_argv?.includes('-w') || process.env.npm_config_argv?.includes('--watch')
 const maybeTest = isWatch ? test.skip : test
 
 maybeTest('handles a crashing test', () => {

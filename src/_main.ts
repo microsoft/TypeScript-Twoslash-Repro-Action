@@ -1,8 +1,8 @@
 import {getIssues} from './getIssues'
 import {getContext} from './getContext'
-import {issueToTwoslashRun} from './issuesToTwoslashRuns'
+import {getRequestsFromIssue} from './getRequestsFromIssue'
 import {updateIssue} from './updatesIssue'
-import {runTwoslashRuns} from './runTwoslashRuns'
+import {runTwoslashRequests} from './runTwoslashRequests'
 import {createAPI} from './utils/api'
 import {downloadTypeScriptVersions} from './downloadTSVersions'
 
@@ -19,12 +19,12 @@ async function run() {
     process.stdout.write('.')
     if (issues.indexOf(issue) % 10) console.log('')
 
-    const runs = issueToTwoslashRun(ctx)(issue)
-
-    const results = runTwoslashRuns(issue, runs)
-
+    const requests = getRequestsFromIssue(ctx)(issue)
     const api = createAPI(ctx)
-    await updateIssue(ctx, issue, results, api)
+    for (const request of requests) {
+      const results = runTwoslashRequests(issue, request)
+      await updateIssue(request, issue, results, api)
+    }
   }
 }
 process.stdout.write('.')

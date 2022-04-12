@@ -1,9 +1,9 @@
-import {TwoslashRun} from './issuesToTwoslashRuns'
+import {TwoslashRequest} from './getRequestsFromIssue'
 import {twoslasher} from '@typescript/twoslash'
 import {existsSync, readdirSync} from 'fs'
 import {join} from 'path'
 import {Issue} from './getIssues'
-import {getPreviousRunInfo} from './utils/getPreviousRunInfo'
+import {getLatestRequest} from './utils/getLatestRequest'
 
 export const enum RunState {
   RaisedException, // from fail to pass
@@ -12,40 +12,37 @@ export const enum RunState {
   Green
 }
 
-export type TwoslashResults = {
+export type TwoslashResult = {
   assertions: string[]
   fails: string[]
   emit?: string
   time: number
   exception?: string
   label: string // e.g. 3.9.5
-  description: string // e.g. Issue body by orta
   state: RunState
-  commentID?: string | undefined
 }
 
-export function runTwoslashRuns(issue: Issue, runs: TwoslashRun): TwoslashResults[] {
-  const oldResults = getPreviousRunInfo(issue)
-  let latestRuns = runs.codeBlocksToRun.map(run => runTwoSlash('Nightly')(run))
+export function runTwoslashRequests(issue: Issue, request: TwoslashRequest): TwoslashResult[] {
+  const oldResults = getLatestRequest(issue)
+  let latestRun = runTwoSlash('Nightly')(request)
 
   if (!oldResults) {
-    // TODO: Fix d.ts for flat
-    const olderRuns = (runs.codeBlocksToRun.map(runTwoSlashOnOlderVersions) as any).flat()
-    return [...olderRuns, ...latestRuns]
+    const olderRuns = runTwoSlashOnOlderVersions(request)
+    return [...olderRuns, latestRun]
   } else {
     const withoutLatest = oldResults.runs.filter(f => f.label !== 'Nightly')
-    return [...withoutLatest, ...latestRuns]
+    return [...withoutLatest, latestRun]
   }
 }
 
-export const runTwoSlashOnOlderVersions = (run: TwoslashRun['codeBlocksToRun'][number]) => {
+export const runTwoSlashOnOlderVersions = (request: TwoslashRequest) => {
   //                       dev                                  prod
   const possibleTSRoots = [join(__dirname, '..', 'dist', 'ts'), join(__dirname, 'ts')]
   const tsRoot = possibleTSRoots.find(f => existsSync(f))!
   const tsVersions = readdirSync(tsRoot).filter(f => f.split('.').length !== 2)
   return tsVersions.map(tsVersion => {
     const ts = require(join(tsRoot, tsVersion))
-    return runTwoSlash(tsVersion)(run, ts)
+    return runTwoSlash(tsVersion)(request, ts)
   })
 }
 
@@ -53,7 +50,7 @@ export const runTwoSlashOnOlderVersions = (run: TwoslashRun['codeBlocksToRun'][n
 //
 export const runTwoSlash =
   (label: string) =>
-  (run: TwoslashRun['codeBlocksToRun'][number], ts?: any): TwoslashResults => {
+  (request: TwoslashRequest, ts?: any): TwoslashResult => {
     let result: ReturnType<typeof twoslasher>
     const start = new Date()
     const getTime = () => Math.round(new Date().getTime() - start.getTime())
@@ -66,7 +63,7 @@ export const runTwoSlash =
 
     try {
       const opts = {noErrorValidation: true, noStaticSemanticInfo: true}
-      result = twoslasher(run.block.content, run.block.lang, {defaultOptions: opts, tsModule})
+      result = twoslasher(request.block.content, request.block.lang, {defaultOptions: opts, tsModule})
     } catch (error: any) {
       return {
         assertions: [],
@@ -74,9 +71,7 @@ export const runTwoSlash =
         exception: error.name + ' - ' + error.message + '\n\n```\n' + error.stack + '\n```\n\n',
         time: getTime(),
         label,
-        commentID: run.commentID,
         state: RunState.RaisedException,
-        description: run.description
       }
     }
 
@@ -86,18 +81,16 @@ export const runTwoSlash =
     if (result.queries.length) state = RunState.HasAssertions
     if (fails.length) state = RunState.CompileFailed
 
-    const returnResults: TwoslashResults = {
+    const returnResults: TwoslashResult = {
       fails,
       assertions: result.queries.map(q => q.text || q.completions!.map(q => q.name).join(', ')),
       emit: result.code,
       time: getTime(),
       label,
-      commentID: run.commentID,
       state,
-      description: run.description
     }
 
-    const showEmit = run.block.content.includes('// @showEmit') // this would also hit @showEmittedFiles only
+    const showEmit = request.block.content.includes('// @showEmit') // this would also hit @showEmittedFiles only
     if (!showEmit) delete returnResults['emit']
 
     return returnResults

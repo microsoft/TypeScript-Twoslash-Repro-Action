@@ -1,5 +1,5 @@
-import {runTwoSlash} from '../runTwoslashRuns'
-import {TwoslashRun} from '../issuesToTwoslashRuns'
+import {runTwoSlash} from '../runTwoslashRequests'
+import {TwoslashRequest} from '../getRequestsFromIssue'
 
 const isWatch = process.env.npm_config_argv?.includes('-w') || process.env.npm_config_argv?.includes('--watch')
 const maybeTest = isWatch ? test.skip : test
@@ -25,7 +25,7 @@ maybeTest('handles a query test', () => {
   expect(result.assertions).toEqual(['const abcde: number'])
 })
 
-const makeRun = (code: string): TwoslashRun['codeBlocksToRun'][number] => ({
+const makeRun = (code: string): TwoslashRequest => ({
   description: 'test run',
   block: {
     lang: 'ts',

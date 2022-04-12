@@ -1,37 +1,41 @@
 import {Issue} from './getIssues'
 import {Context} from './getContext'
-import {TwoslashResults, RunState} from './runTwoslashRuns'
-import {getPreviousRunInfo, runInfoString} from './utils/getPreviousRunInfo'
+import {TwoslashResult, RunState} from './runTwoslashRequests'
+import {getLatestRequest, runInfoString} from './utils/getLatestRequest'
 import {API} from './utils/api'
 import {getTypeScriptMeta} from './utils/getTypeScriptMeta'
+import { TwoslashRequest } from './getRequestsFromIssue'
+import { CodeBlock } from './utils/markdownToCodeBlocks'
 
-export type EmbeddedTwoslashRun = {
+export type EmbeddedTwoslashResult = {
+  code: CodeBlock
   commentID: string | undefined
   typescriptNightlyVersion: string
   typescriptSHA: string
-  runs: TwoslashResults[]
+  runs: TwoslashResult[]
 }
 
-export const updateIssue = async (_ctx: Context, issue: Issue, newRuns: TwoslashResults[], api: API) => {
+export const updateIssue = async (request: TwoslashRequest, issue: Issue, newRuns: TwoslashResult[], api: API) => {
   process.stdout.write(`\nUpdating issue ${issue.number}: `)
   if (newRuns.length === 0) return
 
-  await updateMainComment(newRuns, api, issue)
+  await updateMainComment(request, newRuns, api, issue)
 }
 
-async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Issue) {
-  const nightlyNew = getLatest(newRuns)
+async function updateMainComment(request: TwoslashRequest, newResults: TwoslashResult[], api: API, issue: Issue) {
+  const nightly = getNightly(newResults)!
+  const older = newResults.filter(r => r !== nightly)
 
-  const runInfo = getPreviousRunInfo(issue)
-  const introduction = intro(nightlyNew.length)
-  const above = makeMessageForMainRuns(nightlyNew)
-  const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body')
-  const bottom = makeMessageForOlderRuns(groupedBySource)
+  const runInfo = getLatestRequest(issue)
+  const introduction = intro(request)
+  const above = makeMessageForMainRun(request.description, nightly)
+  const bottom = makeMessageForOlderRuns(older)
   const newTSMeta = await getTypeScriptMeta()
 
   const embedded = runInfoString({
-    runs: newRuns,
-    commentID: runInfo?.commentID,
+    code: request.block,
+    runs: newResults,
+    commentID: request.commentID,
     typescriptNightlyVersion: newTSMeta.version,
     typescriptSHA: newTSMeta.sha
   })
@@ -39,39 +43,24 @@ async function updateMainComment(newRuns: TwoslashResults[], api: API, issue: Is
   await api.editOrCreateComment(issue.id, runInfo?.commentID, msg)
 }
 
-const intro = (runLength: number) => {
-  const repros = runLength === 1 ? 'repro' : `${runLength} repros`
+const intro = (request: TwoslashRequest) => {
   const docsLink = 'https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md'
-  return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript.<hr />`
+  const repro = request.commentUrl ? `[this repro](${request.commentUrl})` : `the repro in the issue body`
+  return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! `
+    + `This comment reflects the current state of ${repro} running against the nightly TypeScript.<hr />`
 }
 
 /** Above the fold */
-export const makeMessageForMainRuns = (newLatestRuns: TwoslashResults[]) => {
-  const groupedBySource = groupBy(newLatestRuns, ts => ts.commentID || '__body')
-  const sources = Object.keys(groupedBySource).sort().reverse()
-
-  const inner = sources.map(source => {
-    const runs = groupedBySource[source]
-    const summerizeRuns = summerizeRunsAsHTML(runs)
-
-    const sortedRuns = summerizeRuns.sort((l, r) => r.label.localeCompare(l.label))
-    return sortedRuns.map(r => toRow(r.description, r.output)).join('\n <br/>')
-  })
-
-  return inner.join('\n\n')
+export const makeMessageForMainRun = (description: string, nightlyResult: TwoslashResult) => {
+    const summarized = summarizeRunsAsHTML([nightlyResult])[0]
+    return [description, summarized.output].join('\n\n')
 }
 
 /** Makes the "Historical" section at the end of an issue */
-const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>) => {
+const makeMessageForOlderRuns = (runs: TwoslashResult[]) => {
   // Sources are the issue body, or comments etc
-  const sources = Object.keys(runsBySource).sort().reverse()
-  const inner = sources.map(source => {
-    const runs = runsBySource[source]
-    const summerizeRuns = summerizeRunsAsHTML(runs)
-
-    return `
-<h4>${runs[0].description}</h4>
-<td>
+  const summarizeRuns = summarizeRunsAsHTML(runs)
+  const inner = `
   <table role="table">
     <thead>
       <tr>
@@ -80,38 +69,25 @@ const makeMessageForOlderRuns = (runsBySource: Record<string, TwoslashResults[]>
       </tr>
     </thead>
     <tbody>
-      ${summerizeRuns
+      ${summarizeRuns
         .sort((l, r) => r.label.localeCompare(l.label))
         .map(r => toRow(r.label, r.output))
         .join('\n')}
     </tbody>
   </table>
-</td>
 `
-  })
 
   return `<details>
   <summary>Historical Information</summary>
-${inner.join('\n\n')}
+${inner}
   </detail>
   `
-}
-
-// https://gist.github.com/JamieMason/0566f8412af9fe6a1d470aa1e089a752#gistcomment-2999506
-function groupBy<T extends any, K extends keyof T>(array: T[], key: K | {(obj: T): string}): Record<string, T[]> {
-  const keyFn = key instanceof Function ? key : (obj: T) => obj[key]
-  return array.reduce((objectsByKeyValue, obj) => {
-    const value = keyFn(obj)
-    // @ts-ignore
-    objectsByKeyValue[value] = (objectsByKeyValue[value] || []).concat(obj)
-    return objectsByKeyValue
-  }, {} as Record<string, T[]>)
 }
 
 const listify = (arr: string[]) =>
   arr.length ? `<ul><li><code>${arr.join('</code></li><li><code>')}</code></li></ul>` : ''
 
-const simpleSummary = (run: TwoslashResults) => {
+const simpleSummary = (run: TwoslashResult) => {
   const msg: string[] = []
   if (run.state === RunState.Green) msg.push(':+1: Compiled')
   if (run.state === RunState.HasAssertions) msg.push(`:warning: Assertions: ${listify(run.assertions)}`)
@@ -134,19 +110,19 @@ const toRow = (label: string, summary: string) => `
  * e.g [ { 3.6.2: "A B"}, { 3.7.1: "A B"},  { 3.8.1: "A B C"}]
  *  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
  */
-const summerizeRunsAsHTML = (runs: TwoslashResults[]) => {
-  const summerizedRows: {label: string; description: string; output: string}[] = []
+const summarizeRunsAsHTML = (runs: TwoslashResult[]) => {
+  const summarizedRows: {label: string; output: string}[] = []
   runs.forEach(run => {
     const summary = simpleSummary(run)
-    const existingSame = summerizedRows.find(r => r.output === summary)
+    const existingSame = summarizedRows.find(r => r.output === summary)
     if (!existingSame) {
-      summerizedRows.push({label: run.label, description: run.description, output: summary})
+      summarizedRows.push({label: run.label, output: summary})
     } else {
       existingSame.label = `${existingSame.label}, ${run.label}`
     }
   })
 
-  return summerizedRows
+  return summarizedRows
 }
 
-const getLatest = (runs: TwoslashResults[]) => runs.filter(r => r.label === 'Nightly')
+const getNightly = (runs: TwoslashResult[]) => runs.find(r => r.label === 'Nightly')

@@ -1,4 +1,4 @@
-import {runInfoString, getPreviousRunInfo} from '../utils/getPreviousRunInfo'
+import {runInfoString, getLatestRequest} from '../utils/getLatestRequest'
 import {Issue} from '../getIssues'
 
 test('gets the value in and then out again', () => {
@@ -14,6 +14,6 @@ test('gets the value in and then out again', () => {
     }
   } as any
 
-  const result = getPreviousRunInfo(issue)
+  const result = getLatestRequest(issue)
   expect(result).toEqual({ typescriptNightlyVersion: '123' })
 })

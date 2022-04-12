@@ -7,6 +7,7 @@ export const getContext = () => {
   const repo = getInput('repo') || process.env.GITHUB_REPOSITORY!
   const label = getInput('label')
   const tag = getInput('code-tag')
+  const bisectIssue = getInput('bisect')
   const owner = repo.split('/')[0]
   const name = repo.split('/')[1]
 
@@ -15,7 +16,8 @@ export const getContext = () => {
     owner,
     name,
     label,
-    tag
+    tag,
+    bisectIssue,
   }
 
   return ctx

@@ -10,6 +10,10 @@ async function run() {
   const ctx = getContext()
   console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`)
 
+  if (ctx.bisectIssue) {
+    return gitBisectTypeScript(ctx.bisectIssue);
+  }
+
   await downloadTypeScriptVersions()
 
   const issues = await getIssues(ctx)

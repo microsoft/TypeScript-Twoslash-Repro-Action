@@ -3,7 +3,7 @@ import {twoslasher} from '@typescript/twoslash'
 import {existsSync, readdirSync} from 'fs'
 import {join} from 'path'
 import {Issue} from './getIssues'
-import {getLatestRequest} from './utils/getLatestRequest'
+import {getResultCommentInfoForRequest} from './utils/getResultCommentInfoForRequest'
 
 export const enum RunState {
   RaisedException, // from fail to pass
@@ -23,7 +23,7 @@ export type TwoslashResult = {
 }
 
 export function runTwoslashRequests(issue: Issue, request: TwoslashRequest): TwoslashResult[] {
-  const oldResults = getLatestRequest(issue)
+  const oldResults = getResultCommentInfoForRequest(issue.comments.nodes, request)
   const tsRoot = getTypeScriptDir()
   const nightlyTs = require(join(tsRoot, "nightly"))
   let latestRun = runTwoSlash('Nightly')(request, nightlyTs)

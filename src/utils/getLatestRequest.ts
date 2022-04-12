@@ -1,7 +1,7 @@
 import {Issue} from '../getIssues'
-import {EmbeddedTwoslashRun} from '../updatesIssue'
+import {EmbeddedTwoslashResult} from '../updatesIssue'
 
-export const getPreviousRunInfo = (issue: Issue): EmbeddedTwoslashRun | undefined => {
+export const getLatestRequest = (issue: Issue): EmbeddedTwoslashResult | undefined => {
   const botComment = issue.comments.nodes.filter(c => c.body.includes('<!--- TypeScriptBot')).pop()
   if (!botComment) return undefined
 
@@ -20,6 +20,6 @@ export const getPreviousRunInfo = (issue: Issue): EmbeddedTwoslashRun | undefine
   }
 }
 
-export const runInfoString = (run: EmbeddedTwoslashRun) => {
+export const runInfoString = (run: EmbeddedTwoslashResult) => {
   return `<!--- TypeScriptBot %%% ${JSON.stringify(run)} %%% --->`
 }

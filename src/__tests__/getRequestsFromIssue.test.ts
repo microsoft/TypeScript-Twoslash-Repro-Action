@@ -1,4 +1,4 @@
-import {issueToTwoslashRun} from '../issuesToTwoslashRuns'
+import {getRequestsFromIssue} from '../getRequestsFromIssue'
 import {Issue} from '../getIssues'
 import {Context} from '../getContext'
 import {issueFixture} from "./fixtures/issue41617"
@@ -64,28 +64,27 @@ const issueWithBodyAndComments: Issue = {
 }
 
 test('handles getting a code sample out of body', async () => {
-  const input = issueToTwoslashRun(testCtx)(issueWithBody)
-  expect(input.issueNumber).toEqual(123)
+  const input = getRequestsFromIssue(testCtx)(issueWithBody)
 
-  const run = input.codeBlocksToRun[0]
+  const run = input[0]
   expect(run.block.content).toContain('console.log')
   expect(run.block.lang).toEqual('ts')
 })
 
 test('handles getting a code sample out of comments', async () => {
-  const input = issueToTwoslashRun(testCtx)(issueWithBodyAndComments)
-  // 2 in body, 1 in comment
-  expect(input.codeBlocksToRun.length).toEqual(3)
+  const input = getRequestsFromIssue(testCtx)(issueWithBodyAndComments)
+  // only one repro per body/comment supported
+  expect(input.length).toEqual(2)
 })
 
 
 test('handles the right names', async () => {
-  const input = issueToTwoslashRun(testCtx)(issueFixture)
+  const input = getRequestsFromIssue(testCtx)(issueFixture)
   // 1 in body, 1 in comment
-  expect(input.codeBlocksToRun.length).toEqual(2)
+  expect(input.length).toEqual(2)
 
-  const body = input.codeBlocksToRun[0]
-  const comment = input.codeBlocksToRun[1]
+  const body = input[0]
+  const comment = input[1]
 
   expect(body.description).toEqual("<a href='#issue-747830259'>Issue body</a> code block by @Igorbek")
   expect(comment.description).toEqual("<a href='https://github.com/microsoft/TypeScript/issues/41617#issuecomment-738957284'>Comment</a> by @weswigham</a>")

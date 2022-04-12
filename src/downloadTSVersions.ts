@@ -2,6 +2,7 @@ import {execSync} from 'child_process'
 import {existsSync, mkdirSync} from 'fs'
 import fetch from 'node-fetch'
 import {join} from 'path'
+import { getTypeScriptNightlyVersion } from './utils/getTypeScriptNightlyVersion'
 
 // Fills ./dist/ts with the last 5 major-min releases of TypeScript
 
@@ -16,9 +17,13 @@ export const downloadTypeScriptVersions = async () => {
     downloadTSVersion(version)
     extractTSVersion(version)
   }
+
+  const nightly = await getTypeScriptNightlyVersion()
+  downloadTSVersion(nightly)
+  extractTSVersion(nightly, "nightly")
 }
 
-const extractTSVersion = (version: string) => {
+const extractTSVersion = (version: string, destFolderName = version) => {
   const zip = join(__dirname, '..', 'dist', 'ts-zips', version + '.tgz')
   const toFolder = join(zip, '..', '..', 'ts')
   if (!existsSync(toFolder)) mkdirSync(toFolder)
@@ -26,7 +31,7 @@ const extractTSVersion = (version: string) => {
   execSync(`tar zxf ${zip} --directory ${toFolder}`)
 
   // This goes to ./dist/ts/package - so rename to ./dist/ts/3.7.4
-  execSync(`mv ${toFolder}/package ${toFolder}/${version}`)
+  execSync(`mv ${toFolder}/package ${toFolder}/${destFolderName}`)
 }
 
 const downloadTSVersion = (version: string) => {

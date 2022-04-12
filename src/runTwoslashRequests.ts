@@ -24,7 +24,9 @@ export type TwoslashResult = {
 
 export function runTwoslashRequests(issue: Issue, request: TwoslashRequest): TwoslashResult[] {
   const oldResults = getLatestRequest(issue)
-  let latestRun = runTwoSlash('Nightly')(request)
+  const tsRoot = getTypeScriptDir()
+  const nightlyTs = require(join(tsRoot, "nightly"))
+  let latestRun = runTwoSlash('Nightly')(request, nightlyTs)
 
   if (!oldResults) {
     const olderRuns = runTwoSlashOnOlderVersions(request)
@@ -35,11 +37,15 @@ export function runTwoslashRequests(issue: Issue, request: TwoslashRequest): Two
   }
 }
 
-export const runTwoSlashOnOlderVersions = (request: TwoslashRequest) => {
+function getTypeScriptDir() {
   //                       dev                                  prod
   const possibleTSRoots = [join(__dirname, '..', 'dist', 'ts'), join(__dirname, 'ts')]
-  const tsRoot = possibleTSRoots.find(f => existsSync(f))!
-  const tsVersions = readdirSync(tsRoot).filter(f => f.split('.').length !== 2)
+  return possibleTSRoots.find(f => existsSync(f))!
+}
+
+export const runTwoSlashOnOlderVersions = (request: TwoslashRequest) => {
+  const tsRoot = getTypeScriptDir()
+  const tsVersions = readdirSync(tsRoot).filter(f => f !== "nightly")
   return tsVersions.map(tsVersion => {
     const ts = require(join(tsRoot, tsVersion))
     return runTwoSlash(tsVersion)(request, ts)
@@ -50,20 +56,14 @@ export const runTwoSlashOnOlderVersions = (request: TwoslashRequest) => {
 //
 export const runTwoSlash =
   (label: string) =>
-  (request: TwoslashRequest, ts?: any): TwoslashResult => {
+  (request: TwoslashRequest, ts: any): TwoslashResult => {
     let result: ReturnType<typeof twoslasher>
     const start = new Date()
     const getTime = () => Math.round(new Date().getTime() - start.getTime())
 
-    // TypeScript dep needs to be looked up by the workflow define parts of the FS first
-    const typeScripts = ['/home/runner/work/TypeScript/TypeScript/node_modules/typescript']
-    const t = typeScripts.find(tpath => existsSync(tpath)) || 'typescript'
-
-    const tsModule = typeof ts === 'object' ? ts : require(t)
-
     try {
       const opts = {noErrorValidation: true, noStaticSemanticInfo: true}
-      result = twoslasher(request.block.content, request.block.lang, {defaultOptions: opts, tsModule})
+      result = twoslasher(request.block.content, request.block.lang, {defaultOptions: opts, tsModule: ts})
     } catch (error: any) {
       return {
         assertions: [],

@@ -1,7 +1,7 @@
 import {Issue} from './getIssues'
 import {Context} from './getContext'
 import {TwoslashResult, RunState} from './runTwoslashRequests'
-import {getLatestRequest, runInfoString} from './utils/getLatestRequest'
+import {getResultCommentInfoForRequest, runInfoString} from './utils/getResultCommentInfoForRequest'
 import {API} from './utils/api'
 import {getTypeScriptNightlyVersion} from './utils/getTypeScriptNightlyVersion'
 import { TwoslashRequest } from './getRequestsFromIssue'
@@ -9,7 +9,7 @@ import { CodeBlock } from './utils/markdownToCodeBlocks'
 
 export type EmbeddedTwoslashResult = {
   code: CodeBlock
-  commentID: string | undefined
+  requestCommentId: string | undefined
   typescriptNightlyVersion: string
   runs: TwoslashResult[]
 }
@@ -25,7 +25,7 @@ async function updateMainComment(request: TwoslashRequest, newResults: TwoslashR
   const nightly = getNightly(newResults)!
   const older = newResults.filter(r => r !== nightly)
 
-  const runInfo = getLatestRequest(issue)
+  const runInfo = getResultCommentInfoForRequest(issue.comments.nodes, request)
   const introduction = intro(request)
   const above = makeMessageForMainRun(request.description, nightly)
   const bottom = makeMessageForOlderRuns(older)
@@ -34,11 +34,11 @@ async function updateMainComment(request: TwoslashRequest, newResults: TwoslashR
   const embedded = runInfoString({
     code: request.block,
     runs: newResults,
-    commentID: request.commentID,
+    requestCommentId: request.commentID,
     typescriptNightlyVersion: nightlyVersion
   })
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
-  await api.editOrCreateComment(issue.id, runInfo?.commentID, msg)
+  await api.editOrCreateComment(issue.id, runInfo?.requestCommentId, msg)
 }
 
 const intro = (request: TwoslashRequest) => {

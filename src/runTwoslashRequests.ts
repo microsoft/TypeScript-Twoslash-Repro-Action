@@ -3,7 +3,7 @@ import {twoslasher} from '@typescript/twoslash'
 import {existsSync, readdirSync} from 'fs'
 import {join} from 'path'
 import {Issue} from './getIssues'
-import {getResultCommentInfoForRequest} from './utils/getResultCommentInfoForRequest'
+import {getResultCommentInfoForRequest} from './utils/getExistingComments'
 
 export const enum RunState {
   RaisedException, // from fail to pass
@@ -32,7 +32,7 @@ export function runTwoslashRequests(issue: Issue, request: TwoslashRequest): Two
     const olderRuns = runTwoSlashOnOlderVersions(request)
     return [...olderRuns, latestRun]
   } else {
-    const withoutLatest = oldResults.runs.filter(f => f.label !== 'Nightly')
+    const withoutLatest = oldResults.info.runs.filter(f => f.label !== 'Nightly')
     return [...withoutLatest, latestRun]
   }
 }

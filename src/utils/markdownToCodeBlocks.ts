@@ -15,7 +15,7 @@ export const markdownToCodeBlocks = (md: string) => {
 
   codeBlocks.forEach(code => {
     if (opener) {
-      const lines = code.split('\r\n')
+      const lines = code.split(/\r?\n/)
       const line = lines[0]
       const [lang, ...tags] = line.split(' ')
       lines.shift()

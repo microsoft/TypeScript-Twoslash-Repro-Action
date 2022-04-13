@@ -8,7 +8,9 @@ const testCtx: Context = {
   name: 'myRepo',
   owner: 'orta',
   token: '123456',
-  tag: 'repro'
+  tag: 'repro',
+  workspace: '',
+  bisectIssue: undefined,
 }
 
 const oneCodeBlock = ` comment blah

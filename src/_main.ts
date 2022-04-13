@@ -1,7 +1,7 @@
 import {getIssue, getIssues} from './getIssues'
 import {getContext} from './getContext'
 import {getRequestsFromIssue} from './getRequestsFromIssue'
-import {postBisectComment, updateIssue} from './updatesIssue'
+import {fixOrDeleteOldComments, postBisectComment, updateIssue} from './updatesIssue'
 import {runTwoslashRequests} from './runTwoslashRequests'
 import {createAPI} from './utils/api'
 import {downloadTypeScriptVersions} from './downloadTSVersions'
@@ -13,7 +13,9 @@ async function run() {
   console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`)
 
   if (ctx.bisectIssue) {
-    const issue = await getIssue(ctx, parseInt(ctx.bisectIssue, 10));
+    let issue = await getIssue(ctx, parseInt(ctx.bisectIssue, 10));
+    issue = await fixOrDeleteOldComments(issue, api)
+
     const result = await gitBisectTypeScript(ctx, issue);
     if (result) {
       await postBisectComment(issue, result, api);
@@ -26,10 +28,11 @@ async function run() {
   const issues = await getIssues(ctx)
   console.log(`Found: ${issues.length} issues with the label: ${ctx.label}`)
 
-  for (const issue of issues) {
+  for (let issue of issues) {
     process.stdout.write('.')
     if (issues.indexOf(issue) % 10) console.log('')
 
+    issue = await fixOrDeleteOldComments(issue, api)
     const requests = getRequestsFromIssue(ctx)(issue)
     for (const request of requests) {
       const results = runTwoslashRequests(issue, request)

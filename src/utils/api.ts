@@ -5,6 +5,7 @@ import { Issue } from '../getIssues'
 
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`
+const deleteComment = `mutation($input: DeleteIssueCommentInput!) { deleteIssueComment(input: $input) { clientMutationId } }`
 
 export type API = ReturnType<typeof createAPI>
 
@@ -18,11 +19,14 @@ export const createAPI = (ctx: Context) => {
       if (existingComment) {
         if (existingComment.body !== sanitizedBody) {
           console.log(diffLines(existingComment.body, sanitizedBody))
-          await octokit.graphql(editComment, {input: {id: existingComment.id, body: sanitizedBody}})
+          return octokit.graphql(editComment, {input: {id: existingComment.id, body: sanitizedBody}})
         }
       } else {
-        await octokit.graphql(addComment, {input: {subjectId: issueID, body: sanitizedBody}})
+        return octokit.graphql(addComment, {input: {subjectId: issueID, body: sanitizedBody}})
       }
+    },
+    deleteComment: async (commentId: string) => {
+      return octokit.graphql(deleteComment, { input: { id: commentId } })
     }
   }
 }

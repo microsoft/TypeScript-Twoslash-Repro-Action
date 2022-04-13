@@ -1,11 +1,23 @@
 import {Issue} from './getIssues'
 import {TwoslashResult, RunState} from './runTwoslashRequests'
-import {getResultCommentInfoForRequest, getBisectCommentInfoForRequest, embedInfo} from './utils/getExistingComments'
+import {getResultCommentInfoForRequest, getBisectCommentInfoForRequest, embedInfo, getAllTypeScriptBotComments} from './utils/getExistingComments'
 import {API} from './utils/api'
 import {getTypeScriptNightlyVersion} from './utils/getTypeScriptNightlyVersion'
 import { TwoslashRequest } from './getRequestsFromIssue'
-import { CodeBlock } from './utils/markdownToCodeBlocks'
 import { BisectResult } from './gitBisectTypeScript'
+
+export async function fixOrDeleteOldComments(issue: Issue, api: API): Promise<Issue> {
+  const issueCopy: Issue = { ...issue, comments: { nodes: [] } }
+  const existingComments = getAllTypeScriptBotComments(issue.comments.nodes)
+  for (const comment of existingComments) {
+    if (comment.info.version !== 1) {
+      await api.deleteComment(comment.comment.id)
+    } else {
+      issueCopy.comments.nodes.push(comment.comment)
+    }
+  }
+  return issueCopy
+}
 
 export function postBisectComment(issue: Issue, result: BisectResult, api: API) {
   const existingCommentInfo = getBisectCommentInfoForRequest(issue.comments.nodes, result.request)
@@ -22,7 +34,7 @@ export const updateIssue = async (request: TwoslashRequest, issue: Issue, newRun
   process.stdout.write(`\nUpdating issue ${issue.number}: `)
   if (newRuns.length === 0) return
 
-  await updateMainComment(request, newRuns, api, issue)
+  return updateMainComment(request, newRuns, api, issue)
 }
 
 async function updateMainComment(request: TwoslashRequest, newResults: TwoslashResult[], api: API, issue: Issue) {
@@ -45,7 +57,7 @@ async function updateMainComment(request: TwoslashRequest, newResults: TwoslashR
     typescriptSha: nightlyVersion.sha,
   })
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
-  await api.editOrCreateComment(issue.id, existingCommentInfo?.comment, msg)
+  return api.editOrCreateComment(issue.id, existingCommentInfo?.comment, msg)
 }
 
 const intro = (request: TwoslashRequest) => {

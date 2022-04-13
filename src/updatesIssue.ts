@@ -1,44 +1,63 @@
 import {Issue} from './getIssues'
-import {Context} from './getContext'
 import {TwoslashResult, RunState} from './runTwoslashRequests'
-import {getResultCommentInfoForRequest, runInfoString} from './utils/getResultCommentInfoForRequest'
+import {getResultCommentInfoForRequest, getBisectCommentInfoForRequest, embedInfo, getAllTypeScriptBotComments} from './utils/getExistingComments'
 import {API} from './utils/api'
 import {getTypeScriptNightlyVersion} from './utils/getTypeScriptNightlyVersion'
 import { TwoslashRequest } from './getRequestsFromIssue'
-import { CodeBlock } from './utils/markdownToCodeBlocks'
+import { BisectResult } from './gitBisectTypeScript'
 
-export type EmbeddedTwoslashResult = {
-  code: CodeBlock
-  requestCommentId: string | undefined
-  typescriptNightlyVersion: string
-  runs: TwoslashResult[]
+export async function fixOrDeleteOldComments(issue: Issue, api: API): Promise<Issue> {
+  const issueCopy: Issue = { ...issue, comments: { nodes: [] } }
+  const existingComments = getAllTypeScriptBotComments(issue.comments.nodes)
+  for (const comment of existingComments) {
+    if (comment.info.version !== 1) {
+      await api.deleteComment(comment.comment.id)
+    } else {
+      issueCopy.comments.nodes.push(comment.comment)
+    }
+  }
+  return issueCopy
+}
+
+export function postBisectComment(issue: Issue, result: BisectResult, api: API) {
+  const existingCommentInfo = getBisectCommentInfoForRequest(issue.comments.nodes, result.request)
+  const embedded = embedInfo({
+    kind: 'bisect-result',
+    version: 1,
+    requestCommentId: result.request.commentID
+  })
+  const message = `The change between ${result.oldRef} and ${result.newRef} occurred at ${result.badCommit}.\n\n${embedded}`
+  return api.editOrCreateComment(issue.id, existingCommentInfo?.comment, message)
 }
 
 export const updateIssue = async (request: TwoslashRequest, issue: Issue, newRuns: TwoslashResult[], api: API) => {
   process.stdout.write(`\nUpdating issue ${issue.number}: `)
   if (newRuns.length === 0) return
 
-  await updateMainComment(request, newRuns, api, issue)
+  return updateMainComment(request, newRuns, api, issue)
 }
 
 async function updateMainComment(request: TwoslashRequest, newResults: TwoslashResult[], api: API, issue: Issue) {
   const nightly = getNightly(newResults)!
   const older = newResults.filter(r => r !== nightly)
 
-  const runInfo = getResultCommentInfoForRequest(issue.comments.nodes, request)
+  const existingCommentInfo = getResultCommentInfoForRequest(issue.comments.nodes, request)
   const introduction = intro(request)
   const above = makeMessageForMainRun(request.description, nightly)
   const bottom = makeMessageForOlderRuns(older)
   const nightlyVersion = await getTypeScriptNightlyVersion()
 
-  const embedded = runInfoString({
+  const embedded = embedInfo({
+    version: 1,
+    kind: 'twoslash-result',
     code: request.block,
     runs: newResults,
     requestCommentId: request.commentID,
-    typescriptNightlyVersion: nightlyVersion
+    typescriptNightlyVersion: nightlyVersion.version,
+    typescriptSha: nightlyVersion.sha,
   })
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
-  await api.editOrCreateComment(issue.id, runInfo?.requestCommentId, msg)
+  return api.editOrCreateComment(issue.id, existingCommentInfo?.comment, msg)
 }
 
 const intro = (request: TwoslashRequest) => {

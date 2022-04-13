@@ -19,8 +19,8 @@ export const downloadTypeScriptVersions = async () => {
   }
 
   const nightly = await getTypeScriptNightlyVersion()
-  downloadTSVersion(nightly)
-  extractTSVersion(nightly, "nightly")
+  downloadTSVersion(nightly.version)
+  extractTSVersion(nightly.version, "nightly")
 }
 
 const extractTSVersion = (version: string, destFolderName = version) => {

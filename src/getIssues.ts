@@ -25,6 +25,12 @@ export type Issue = {
   }
 }
 
+export async function getIssue(context: Context, issue: number): Promise<Issue> {
+  const octokit = getOctokit(context.token)
+  const req = issueQuery(context.owner, context.name, issue)
+  return (await octokit.graphql(req.query, req.vars) as any).repository.issue
+}
+
 export async function getIssues(context: Context): Promise<Issue[]> {
   const octokit = getOctokit(context.token)
   const req = issuesQuery(context.owner, context.name, context.label)
@@ -77,3 +83,43 @@ const issuesQuery = (owner: string, name: string, label: string) => {
     vars
   }
 }
+
+const issueQuery = (owner: string, name: string, issue: number) => {
+  const query = `query GetIssue($owner: String!, $name: String!, $issue:Int!) {
+    repository(name: $name, owner:$owner) {
+      issue(number: $issue) {
+        id
+        databaseId
+        number
+
+        body
+
+        author {
+          login
+        }
+        comments(last: 100) {
+          nodes {
+            body
+            id
+            url
+
+            author {
+              login
+            }
+          }
+        }
+      }
+    }
+  }`
+
+  const vars = {
+    owner,
+    name,
+    issue
+  }
+
+  return {
+    query,
+    vars
+  }
+};

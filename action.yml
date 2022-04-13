@@ -7,16 +7,23 @@ inputs:
     required: true
 
   label:
+    required: false
     description: 'What label should be on an issue to indicate it has a repro?'
     default: 'Has Repro'
 
   repo:
+    required: false
     description: 'What repo should this action look at, if not set it uses the same repo'
 
   code-tag:
+    required: false
     description: 'What tag should be applied to the markdown code block?'
     default: 'repro'
 
+  bisect:
+    required: false
+    description: 'Request a git bisect against an issue that already has a repro. Value is the issue number.'
+
 runs:
-  using: 'node12'
+  using: 'node16'
   main: 'dist/index.js'

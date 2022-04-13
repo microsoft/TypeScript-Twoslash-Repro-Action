@@ -2,15 +2,13 @@ import {Issue} from './getIssues'
 import {markdownToCodeBlocks, CodeBlock} from './utils/markdownToCodeBlocks'
 import {Context} from './getContext'
 
-
-
 export type TwoslashRequest = {
   description: string
   // If missing, then it's in body
   commentID?: string
   commentUrl?: string
   block: CodeBlock
-};
+}
 
 export const getRequestsFromIssue =
   (ctx: Context) =>
@@ -22,7 +20,7 @@ export const getRequestsFromIssue =
       requests.push({
         description: `<a href='#issue-${issue.databaseId}'>Issue body</a> code block by @${issue.author.login}`,
         block: bodyCodeBlock
-      });
+      })
     }
 
     // Comment -> CodeBlock
@@ -38,7 +36,7 @@ export const getRequestsFromIssue =
       }
     }
 
-    return requests;
+    return requests
   }
 
 const isReproCodeBlock = (tag: string) => (codeBlock: CodeBlock) => codeBlock.tags.includes(tag)

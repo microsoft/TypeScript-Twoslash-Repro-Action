@@ -5,7 +5,7 @@ import {fixOrDeleteOldComments, postBisectComment, updateIssue} from './updatesI
 import {runTwoslashRequests} from './runTwoslashRequests'
 import {createAPI} from './utils/api'
 import {downloadTypeScriptVersions} from './downloadTSVersions'
-import { gitBisectTypeScript } from './gitBisectTypeScript'
+import {gitBisectTypeScript} from './gitBisectTypeScript'
 
 async function run() {
   const ctx = getContext()
@@ -13,14 +13,14 @@ async function run() {
   console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`)
 
   if (ctx.bisectIssue) {
-    let issue = await getIssue(ctx, parseInt(ctx.bisectIssue, 10));
+    let issue = await getIssue(ctx, parseInt(ctx.bisectIssue, 10))
     issue = await fixOrDeleteOldComments(issue, api)
 
-    const result = await gitBisectTypeScript(ctx, issue);
+    const result = await gitBisectTypeScript(ctx, issue)
     if (result) {
-      await postBisectComment(issue, result, api);
+      await postBisectComment(issue, result, api)
     }
-    return;
+    return
   }
 
   await downloadTypeScriptVersions()

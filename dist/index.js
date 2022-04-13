@@ -726,6 +726,90 @@ module.exports = osName;
 
 /***/ }),
 
+/***/ 8:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.runTwoSlash = exports.runTwoSlashOnOlderVersions = exports.runTwoslashRequests = void 0;
+const twoslash_1 = __webpack_require__(689);
+const fs_1 = __webpack_require__(747);
+const path_1 = __webpack_require__(622);
+const getExistingComments_1 = __webpack_require__(932);
+function runTwoslashRequests(issue, request) {
+    const oldResults = (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
+    const tsRoot = getTypeScriptDir();
+    const nightlyTs = require((0, path_1.join)(tsRoot, "nightly"));
+    let latestRun = (0, exports.runTwoSlash)('Nightly')(request, nightlyTs);
+    if (!oldResults) {
+        const olderRuns = (0, exports.runTwoSlashOnOlderVersions)(request);
+        return [...olderRuns, latestRun];
+    }
+    else {
+        const withoutLatest = oldResults.info.runs.filter(f => f.label !== 'Nightly');
+        return [...withoutLatest, latestRun];
+    }
+}
+exports.runTwoslashRequests = runTwoslashRequests;
+function getTypeScriptDir() {
+    //                       dev                                  prod
+    const possibleTSRoots = [(0, path_1.join)(__dirname, '..', 'dist', 'ts'), (0, path_1.join)(__dirname, 'ts')];
+    return possibleTSRoots.find(f => (0, fs_1.existsSync)(f));
+}
+const runTwoSlashOnOlderVersions = (request) => {
+    const tsRoot = getTypeScriptDir();
+    const tsVersions = (0, fs_1.readdirSync)(tsRoot).filter(f => f !== "nightly");
+    return tsVersions.map(tsVersion => {
+        const ts = require((0, path_1.join)(tsRoot, tsVersion));
+        return (0, exports.runTwoSlash)(tsVersion)(request, ts);
+    });
+};
+exports.runTwoSlashOnOlderVersions = runTwoSlashOnOlderVersions;
+// TODO: Timeouts?
+//
+const runTwoSlash = (label) => (request, ts) => {
+    let result;
+    const start = new Date();
+    const getTime = () => Math.round(new Date().getTime() - start.getTime());
+    try {
+        const opts = { noErrorValidation: true, noStaticSemanticInfo: true };
+        result = (0, twoslash_1.twoslasher)(request.block.content, request.block.lang, { defaultOptions: opts, tsModule: ts });
+    }
+    catch (error) {
+        return {
+            assertions: [],
+            fails: [],
+            exception: error.name + ' - ' + error.message + '\n\n```\n' + error.stack + '\n```\n\n',
+            time: getTime(),
+            label,
+            state: 0 /* RaisedException */,
+        };
+    }
+    const fails = result.errors.map(e => e.renderedMessage);
+    let state = 3 /* Green */;
+    if (result.queries.length)
+        state = 2 /* HasAssertions */;
+    if (fails.length)
+        state = 1 /* CompileFailed */;
+    const returnResults = {
+        fails,
+        assertions: result.queries.map(q => q.text || q.completions.map(q => q.name).join(', ')),
+        emit: result.code,
+        time: getTime(),
+        label,
+        state,
+    };
+    const showEmit = request.block.content.includes('// @showEmit'); // this would also hit @showEmittedFiles only
+    if (!showEmit)
+        delete returnResults['emit'];
+    return returnResults;
+};
+exports.runTwoSlash = runTwoSlash;
+//# sourceMappingURL=runTwoslashRequests.js.map
+
+/***/ }),
+
 /***/ 9:
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -2053,25 +2137,38 @@ exports.parseURL = __webpack_require__(936).parseURL;
 Object.defineProperty(exports, "__esModule", { value: true });
 const getIssues_1 = __webpack_require__(520);
 const getContext_1 = __webpack_require__(493);
-const issuesToTwoslashRuns_1 = __webpack_require__(984);
+const getRequestsFromIssue_1 = __webpack_require__(418);
 const updatesIssue_1 = __webpack_require__(700);
-const runTwoslashRuns_1 = __webpack_require__(303);
+const runTwoslashRequests_1 = __webpack_require__(8);
 const api_1 = __webpack_require__(105);
 const downloadTSVersions_1 = __webpack_require__(580);
+const gitBisectTypeScript_1 = __webpack_require__(664);
 async function run() {
     const ctx = (0, getContext_1.getContext)();
+    const api = (0, api_1.createAPI)(ctx);
     console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`);
+    if (ctx.bisectIssue) {
+        let issue = await (0, getIssues_1.getIssue)(ctx, parseInt(ctx.bisectIssue, 10));
+        issue = await (0, updatesIssue_1.fixOrDeleteOldComments)(issue, api);
+        const result = await (0, gitBisectTypeScript_1.gitBisectTypeScript)(ctx, issue);
+        if (result) {
+            await (0, updatesIssue_1.postBisectComment)(issue, result, api);
+        }
+        return;
+    }
     await (0, downloadTSVersions_1.downloadTypeScriptVersions)();
     const issues = await (0, getIssues_1.getIssues)(ctx);
     console.log(`Found: ${issues.length} issues with the label: ${ctx.label}`);
-    for (const issue of issues) {
+    for (let issue of issues) {
         process.stdout.write('.');
         if (issues.indexOf(issue) % 10)
             console.log('');
-        const runs = (0, issuesToTwoslashRuns_1.issueToTwoslashRun)(ctx)(issue);
-        const results = (0, runTwoslashRuns_1.runTwoslashRuns)(issue, runs);
-        const api = (0, api_1.createAPI)(ctx);
-        await (0, updatesIssue_1.updateIssue)(ctx, issue, results, api);
+        issue = await (0, updatesIssue_1.fixOrDeleteOldComments)(issue, api);
+        const requests = (0, getRequestsFromIssue_1.getRequestsFromIssue)(ctx)(issue);
+        for (const request of requests) {
+            const results = (0, runTwoslashRequests_1.runTwoslashRequests)(issue, request);
+            await (0, updatesIssue_1.updateIssue)(request, issue, results, api);
+        }
     }
 }
 process.stdout.write('.');
@@ -2080,7 +2177,7 @@ process.on('unhandledRejection', error => {
     process.exitCode = 1;
 });
 run();
-
+//# sourceMappingURL=_main.js.map
 
 /***/ }),
 
@@ -2373,35 +2470,30 @@ const github_1 = __webpack_require__(469);
 const diff_1 = __webpack_require__(799);
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`;
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`;
-const getComment = `query GetComment ($commentID: ID!) {
-  node(id: $commentID) {
-    ... on Comment {
-      body
-    }
-  }
-}`;
+const deleteComment = `mutation($input: DeleteIssueCommentInput!) { deleteIssueComment(input: $input) { clientMutationId } }`;
 const createAPI = (ctx) => {
     const octokit = (0, github_1.getOctokit)(ctx.token);
     return {
-        editOrCreateComment: async (issueID, commentID, body) => {
+        editOrCreateComment: async (issueID, existingComment, body) => {
             // https://regex101.com/r/ZORaaK/1
             const sanitizedBody = body.replace(/home\/runner\/work\/TypeScript-Twoslash-Repro-Action\/TypeScript-Twoslash-Repro-Action\/dist/g, "[root]");
-            if (commentID) {
-                const commentReq = await octokit.graphql(getComment, { commentID });
-                const commentBody = commentReq.node.body;
-                if (commentBody !== sanitizedBody) {
-                    console.log((0, diff_1.diffLines)(commentBody, sanitizedBody));
-                    await octokit.graphql(editComment, { input: { id: commentID, body: sanitizedBody } });
+            if (existingComment) {
+                if (existingComment.body !== sanitizedBody) {
+                    console.log((0, diff_1.diffLines)(existingComment.body, sanitizedBody));
+                    return octokit.graphql(editComment, { input: { id: existingComment.id, body: sanitizedBody } });
                 }
             }
             else {
-                await octokit.graphql(addComment, { input: { subjectId: issueID, body: sanitizedBody } });
+                return octokit.graphql(addComment, { input: { subjectId: issueID, body: sanitizedBody } });
             }
+        },
+        deleteComment: async (commentId) => {
+            return octokit.graphql(deleteComment, { input: { id: commentId } });
         }
     };
 };
 exports.createAPI = createAPI;
-
+//# sourceMappingURL=api.js.map
 
 /***/ }),
 
@@ -4189,94 +4281,6 @@ exports.paginateRest = paginateRest;
 
 /***/ }),
 
-/***/ 303:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.runTwoSlash = exports.runTwoSlashOnOlderVersions = exports.runTwoslashRuns = void 0;
-const twoslash_1 = __webpack_require__(689);
-const fs_1 = __webpack_require__(747);
-const path_1 = __webpack_require__(622);
-const getPreviousRunInfo_1 = __webpack_require__(707);
-function runTwoslashRuns(issue, runs) {
-    const oldResults = (0, getPreviousRunInfo_1.getPreviousRunInfo)(issue);
-    let latestRuns = runs.codeBlocksToRun.map(run => (0, exports.runTwoSlash)('Nightly')(run));
-    if (!oldResults) {
-        // TODO: Fix d.ts for flat
-        const olderRuns = runs.codeBlocksToRun.map(exports.runTwoSlashOnOlderVersions).flat();
-        return [...olderRuns, ...latestRuns];
-    }
-    else {
-        const withoutLatest = oldResults.runs.filter(f => f.label !== 'Nightly');
-        return [...withoutLatest, ...latestRuns];
-    }
-}
-exports.runTwoslashRuns = runTwoslashRuns;
-const runTwoSlashOnOlderVersions = (run) => {
-    //                       dev                                  prod
-    const possibleTSRoots = [(0, path_1.join)(__dirname, '..', 'dist', 'ts'), (0, path_1.join)(__dirname, 'ts')];
-    const tsRoot = possibleTSRoots.find(f => (0, fs_1.existsSync)(f));
-    const tsVersions = (0, fs_1.readdirSync)(tsRoot).filter(f => f.split('.').length !== 2);
-    return tsVersions.map(tsVersion => {
-        const ts = require((0, path_1.join)(tsRoot, tsVersion));
-        return (0, exports.runTwoSlash)(tsVersion)(run, ts);
-    });
-};
-exports.runTwoSlashOnOlderVersions = runTwoSlashOnOlderVersions;
-// TODO: Timeouts?
-//
-const runTwoSlash = (label) => (run, ts) => {
-    let result;
-    const start = new Date();
-    const getTime = () => Math.round(new Date().getTime() - start.getTime());
-    // TypeScript dep needs to be looked up by the workflow define parts of the FS first
-    const typeScripts = ['/home/runner/work/TypeScript/TypeScript/node_modules/typescript'];
-    const t = typeScripts.find(tpath => (0, fs_1.existsSync)(tpath)) || 'typescript';
-    const tsModule = typeof ts === 'object' ? ts : require(t);
-    try {
-        const opts = { noErrorValidation: true, noStaticSemanticInfo: true };
-        result = (0, twoslash_1.twoslasher)(run.block.content, run.block.lang, { defaultOptions: opts, tsModule });
-    }
-    catch (error) {
-        return {
-            assertions: [],
-            fails: [],
-            exception: error.name + ' - ' + error.message + '\n\n```\n' + error.stack + '\n```\n\n',
-            time: getTime(),
-            label,
-            commentID: run.commentID,
-            state: 0 /* RaisedException */,
-            description: run.description
-        };
-    }
-    const fails = result.errors.map(e => e.renderedMessage);
-    let state = 3 /* Green */;
-    if (result.queries.length)
-        state = 2 /* HasAssertions */;
-    if (fails.length)
-        state = 1 /* CompileFailed */;
-    const returnResults = {
-        fails,
-        assertions: result.queries.map(q => q.text || q.completions.map(q => q.name).join(', ')),
-        emit: result.code,
-        time: getTime(),
-        label,
-        commentID: run.commentID,
-        state,
-        description: run.description
-    };
-    const showEmit = run.block.content.includes('// @showEmit'); // this would also hit @showEmittedFiles only
-    if (!showEmit)
-        delete returnResults['emit'];
-    return returnResults;
-};
-exports.runTwoSlash = runTwoSlash;
-
-
-/***/ }),
-
 /***/ 320:
 /***/ (function(__unusedmodule, exports) {
 
@@ -4293,7 +4297,7 @@ const markdownToCodeBlocks = (md) => {
     // TODO: Remove prefix on code > ?
     codeBlocks.forEach(code => {
         if (opener) {
-            const lines = code.split('\r\n');
+            const lines = code.split(/\r?\n/);
             const line = lines[0];
             const [lang, ...tags] = line.split(' ');
             lines.shift();
@@ -4308,7 +4312,7 @@ const markdownToCodeBlocks = (md) => {
     return blocks;
 };
 exports.markdownToCodeBlocks = markdownToCodeBlocks;
-
+//# sourceMappingURL=markdownToCodeBlocks.js.map
 
 /***/ }),
 
@@ -5998,6 +6002,45 @@ exports.FetchError = FetchError;
 
 /***/ }),
 
+/***/ 380:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.gitBisect = void 0;
+const child_process_1 = __webpack_require__(129);
+const http_1 = __webpack_require__(605);
+function gitBisect(cwd, oldRef, newRef, isSameAsOld) {
+    (0, child_process_1.execSync)(`git bisect start ${newRef} ${oldRef} --`, { cwd });
+    const server = (0, http_1.createServer)(async (_, res) => {
+        try {
+            res.writeHead(200).end(await isSameAsOld() ? '0' : '1');
+        }
+        catch (err) {
+            console.error(err);
+            res.writeHead(200).end('125');
+        }
+    });
+    server.listen(3000);
+    return new Promise((resolve, reject) => {
+        (0, child_process_1.exec)("git bisect run sh -c 'exit `curl -s http://localhost:3000`'", { encoding: 'utf8', cwd }, (err, stdout, stderr) => {
+            server.close();
+            if (err) {
+                return reject(err);
+            }
+            const sha = stdout.substring(stdout.lastIndexOf(' is the first bad commit') - 40, stdout.lastIndexOf(' is the first bad commit'));
+            console.log(stdout);
+            (0, child_process_1.execSync)('git bisect reset');
+            resolve({ sha, output: stdout });
+        });
+    });
+}
+exports.gitBisect = gitBisect;
+//# sourceMappingURL=gitBisect.js.map
+
+/***/ }),
+
 /***/ 385:
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -7382,6 +7425,44 @@ function diffArrays(oldArr, newArr, callback) {
 
 module.exports = __webpack_require__(141);
 
+
+/***/ }),
+
+/***/ 418:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getRequestsFromIssue = void 0;
+const markdownToCodeBlocks_1 = __webpack_require__(320);
+const getRequestsFromIssue = (ctx) => (issue) => {
+    // Body -> CodeBlock
+    const requests = [];
+    const bodyCodeBlock = (0, markdownToCodeBlocks_1.markdownToCodeBlocks)(issue.body).find(isReproCodeBlock(ctx.tag));
+    if (bodyCodeBlock) {
+        requests.push({
+            description: `<a href='#issue-${issue.databaseId}'>Issue body</a> code block by @${issue.author.login}`,
+            block: bodyCodeBlock
+        });
+    }
+    // Comment -> CodeBlock
+    for (const comment of issue.comments.nodes) {
+        const block = (0, markdownToCodeBlocks_1.markdownToCodeBlocks)(comment.body).find(isReproCodeBlock(ctx.tag));
+        if (block) {
+            requests.push({
+                block,
+                commentID: comment.id,
+                commentUrl: comment.url,
+                description: `<a href='${comment.url}'>Comment</a> by @${comment.author.login}</a>`
+            });
+        }
+    }
+    return requests;
+};
+exports.getRequestsFromIssue = getRequestsFromIssue;
+const isReproCodeBlock = (tag) => (codeBlock) => codeBlock.tags.includes(tag);
+//# sourceMappingURL=getRequestsFromIssue.js.map
 
 /***/ }),
 
@@ -11517,8 +11598,10 @@ const core_1 = __webpack_require__(393);
 const getContext = () => {
     const token = (0, core_1.getInput)('github-token');
     const repo = (0, core_1.getInput)('repo') || process.env.GITHUB_REPOSITORY;
+    const workspace = process.env.GITHUB_WORKSPACE;
     const label = (0, core_1.getInput)('label');
     const tag = (0, core_1.getInput)('code-tag');
+    const bisectIssue = (0, core_1.getInput)('bisect');
     const owner = repo.split('/')[0];
     const name = repo.split('/')[1];
     const ctx = {
@@ -11526,12 +11609,14 @@ const getContext = () => {
         owner,
         name,
         label,
-        tag
+        tag,
+        bisectIssue,
+        workspace,
     };
     return ctx;
 };
 exports.getContext = getContext;
-
+//# sourceMappingURL=getContext.js.map
 
 /***/ }),
 
@@ -11678,8 +11763,14 @@ function addHook (state, kind, name, hook) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getIssues = void 0;
+exports.getIssues = exports.getIssue = void 0;
 const github_1 = __webpack_require__(469);
+async function getIssue(context, issue) {
+    const octokit = (0, github_1.getOctokit)(context.token);
+    const req = issueQuery(context.owner, context.name, issue);
+    return (await octokit.graphql(req.query, req.vars)).repository.issue;
+}
+exports.getIssue = getIssue;
 async function getIssues(context) {
     const octokit = (0, github_1.getOctokit)(context.token);
     const req = issuesQuery(context.owner, context.name, context.label);
@@ -11728,7 +11819,44 @@ const issuesQuery = (owner, name, label) => {
         vars
     };
 };
+const issueQuery = (owner, name, issue) => {
+    const query = `query GetIssue($owner: String!, $name: String!, $issue:Int!) {
+    repository(name: $name, owner:$owner) {
+      issue(number: $issue) {
+        id
+        databaseId
+        number
 
+        body
+
+        author {
+          login
+        }
+        comments(last: 100) {
+          nodes {
+            body
+            id
+            url
+
+            author {
+              login
+            }
+          }
+        }
+      }
+    }
+  }`;
+    const vars = {
+        owner,
+        name,
+        issue
+    };
+    return {
+        query,
+        vars
+    };
+};
+//# sourceMappingURL=getIssues.js.map
 
 /***/ }),
 
@@ -12799,6 +12927,7 @@ const child_process_1 = __webpack_require__(129);
 const fs_1 = __webpack_require__(747);
 const node_fetch_1 = __importDefault(__webpack_require__(454));
 const path_1 = __webpack_require__(622);
+const getTypeScriptNightlyVersion_1 = __webpack_require__(668);
 // Fills ./dist/ts with the last 5 major-min releases of TypeScript
 const downloadTypeScriptVersions = async () => {
     const releases = await downloadReleases();
@@ -12809,16 +12938,19 @@ const downloadTypeScriptVersions = async () => {
         downloadTSVersion(version);
         extractTSVersion(version);
     }
+    const nightly = await (0, getTypeScriptNightlyVersion_1.getTypeScriptNightlyVersion)();
+    downloadTSVersion(nightly.version);
+    extractTSVersion(nightly.version, "nightly");
 };
 exports.downloadTypeScriptVersions = downloadTypeScriptVersions;
-const extractTSVersion = (version) => {
+const extractTSVersion = (version, destFolderName = version) => {
     const zip = (0, path_1.join)(__dirname, '..', 'dist', 'ts-zips', version + '.tgz');
     const toFolder = (0, path_1.join)(zip, '..', '..', 'ts');
     if (!(0, fs_1.existsSync)(toFolder))
         (0, fs_1.mkdirSync)(toFolder);
     (0, child_process_1.execSync)(`tar zxf ${zip} --directory ${toFolder}`);
     // This goes to ./dist/ts/package - so rename to ./dist/ts/3.7.4
-    (0, child_process_1.execSync)(`mv ${toFolder}/package ${toFolder}/${version}`);
+    (0, child_process_1.execSync)(`mv ${toFolder}/package ${toFolder}/${destFolderName}`);
 };
 const downloadTSVersion = (version) => {
     const url = `https://registry.npmjs.org/typescript/-/typescript-${version}.tgz`;
@@ -12845,7 +12977,7 @@ const reduceToMajMin = (versions) => {
     });
     return [...latestMajMin.values()];
 };
-
+//# sourceMappingURL=downloadTSVersions.js.map
 
 /***/ }),
 
@@ -14130,17 +14262,101 @@ function diffChars(oldStr, newStr, options) {
 
 /***/ }),
 
+/***/ 664:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.gitBisectTypeScript = void 0;
+const child_process_1 = __webpack_require__(129);
+const path_1 = __webpack_require__(622);
+const getRequestsFromIssue_1 = __webpack_require__(418);
+const gitBisect_1 = __webpack_require__(380);
+const runTwoslashRequests_1 = __webpack_require__(8);
+const getExistingComments_1 = __webpack_require__(932);
+async function gitBisectTypeScript(context, issue) {
+    const requests = (0, getRequestsFromIssue_1.getRequestsFromIssue)(context)(issue);
+    const request = requests[requests.length - 1];
+    const resultComment = request && (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
+    if (!resultComment)
+        return;
+    let newResult;
+    let oldResult;
+    for (let i = resultComment.info.runs.length - 1; i >= 0; i--) {
+        const current = resultComment.info.runs[i];
+        if (!newResult || resultsAreEqual(newResult, current)) {
+            newResult = current;
+        }
+        else {
+            oldResult = current;
+            break;
+        }
+    }
+    if (!oldResult || !newResult)
+        return;
+    const oldRef = `v${oldResult.label}`;
+    const newRef = newResult.label === "Nightly" ? resultComment.info.typescriptSha : `v${newResult.label}`;
+    const oldMergeBase = (0, child_process_1.execSync)(`git merge-base ${oldRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
+    const newMergeBase = (0, child_process_1.execSync)(`git merge-base ${newRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
+    const { output, sha } = await (0, gitBisect_1.gitBisect)(context.workspace, oldMergeBase, newMergeBase, () => {
+        console.log("npm ci");
+        (0, child_process_1.execSync)("npm ci", { cwd: context.workspace });
+        console.log("npx gulp local");
+        (0, child_process_1.execSync)("npx gulp local", { cwd: context.workspace, stdio: "inherit" });
+        const tsPath = (0, path_1.join)(context.workspace, "built/local/typescript.js");
+        delete require.cache[require.resolve(tsPath)];
+        const result = (0, runTwoslashRequests_1.runTwoSlash)("bisecting")({
+            block: request.block,
+            description: "",
+        }, require(tsPath));
+        return resultsAreEqual(oldResult, result);
+    });
+    return {
+        request,
+        stdout: output,
+        badCommit: sha,
+        newRef: newResult.label,
+        oldRef: oldResult.label,
+    };
+}
+exports.gitBisectTypeScript = gitBisectTypeScript;
+function resultsAreEqual(a, b) {
+    return a.assertions.toString() === b.assertions.toString()
+        && a.fails.toString() === b.fails.toString()
+        && a.emit === b.emit
+        && a.exception === b.exception;
+}
+//# sourceMappingURL=gitBisectTypeScript.js.map
+
+/***/ }),
+
+/***/ 668:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getTypeScriptNightlyVersion = void 0;
+const node_fetch_1 = __importDefault(__webpack_require__(454));
+const getTypeScriptNightlyVersion = async () => {
+    const npmInfo = await (0, node_fetch_1.default)(`https://registry.npmjs.org/typescript`);
+    const res = await npmInfo.json();
+    const version = res["dist-tags"].next;
+    return { version, sha: res.versions[version].gitHead };
+};
+exports.getTypeScriptNightlyVersion = getTypeScriptNightlyVersion;
+//# sourceMappingURL=getTypeScriptNightlyVersion.js.map
+
+/***/ }),
+
 /***/ 669:
 /***/ (function(module) {
 
 module.exports = require("util");
-
-/***/ }),
-
-/***/ 688:
-/***/ (function(module) {
-
-module.exports = {"name":"typescript","author":"Microsoft Corp.","homepage":"https://www.typescriptlang.org/","version":"4.5.2","license":"Apache-2.0","description":"TypeScript is a language for application scale JavaScript development","keywords":["TypeScript","Microsoft","compiler","language","javascript"],"bugs":{"url":"https://github.com/Microsoft/TypeScript/issues"},"repository":{"type":"git","url":"https://github.com/Microsoft/TypeScript.git"},"main":"./lib/typescript.js","typings":"./lib/typescript.d.ts","bin":{"tsc":"./bin/tsc","tsserver":"./bin/tsserver"},"engines":{"node":">=4.2.0"},"devDependencies":{"@octokit/rest":"latest","@types/browserify":"latest","@types/chai":"latest","@types/convert-source-map":"latest","@types/glob":"latest","@types/gulp":"^4.0.9","@types/gulp-concat":"latest","@types/gulp-newer":"latest","@types/gulp-rename":"0.0.33","@types/gulp-sourcemaps":"0.0.32","@types/jake":"latest","@types/merge2":"latest","@types/microsoft__typescript-etw":"latest","@types/minimatch":"latest","@types/minimist":"latest","@types/mkdirp":"latest","@types/mocha":"latest","@types/ms":"latest","@types/node":"latest","@types/node-fetch":"^2.3.4","@types/q":"latest","@types/source-map-support":"latest","@types/through2":"latest","@types/xml2js":"^0.4.0","@typescript-eslint/eslint-plugin":"^4.28.0","@typescript-eslint/experimental-utils":"^4.28.0","@typescript-eslint/parser":"^4.28.0","async":"latest","azure-devops-node-api":"^11.0.1","browser-resolve":"^1.11.2","browserify":"latest","chai":"latest","chalk":"latest","convert-source-map":"latest","del":"5.1.0","diff":"^4.0.2","eslint":"7.12.1","eslint-formatter-autolinkable-stylish":"1.1.4","eslint-plugin-import":"2.22.1","eslint-plugin-jsdoc":"30.7.6","eslint-plugin-no-null":"1.0.2","fancy-log":"latest","fs-extra":"^9.0.0","glob":"latest","gulp":"^4.0.0","gulp-concat":"latest","gulp-insert":"latest","gulp-newer":"latest","gulp-rename":"latest","gulp-sourcemaps":"latest","merge2":"latest","minimist":"latest","mkdirp":"latest","mocha":"latest","mocha-fivemat-progress-reporter":"latest","ms":"^2.1.3","node-fetch":"^2.6.1","plugin-error":"latest","pretty-hrtime":"^1.0.3","prex":"^0.4.3","q":"latest","source-map-support":"latest","through2":"latest","typescript":"^4.2.3","vinyl":"latest","vinyl-sourcemaps-apply":"latest","xml2js":"^0.4.19"},"scripts":{"prepare":"gulp build-eslint-rules","pretest":"gulp tests","test":"gulp runtests-parallel --light=false","test:eslint-rules":"gulp run-eslint-rules-tests","build":"npm run build:compiler && npm run build:tests","build:compiler":"gulp local","build:tests":"gulp tests","start":"node lib/tsc","clean":"gulp clean","gulp":"gulp","jake":"gulp","lint":"gulp lint","lint:ci":"gulp lint --ci","lint:compiler":"gulp lint-compiler","lint:scripts":"gulp lint-scripts","setup-hooks":"node scripts/link-hooks.js"},"browser":{"fs":false,"os":false,"path":false,"crypto":false,"buffer":false,"@microsoft/typescript-etw":false,"source-map-support":false,"inspector":false},"volta":{"node":"14.15.5"}};
 
 /***/ }),
 
@@ -14217,61 +14433,78 @@ module.exports = (promise, onFinally) => {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.makeMessageForMainRuns = exports.updateIssue = void 0;
-const getPreviousRunInfo_1 = __webpack_require__(707);
-const getTypeScriptMeta_1 = __webpack_require__(772);
-const updateIssue = async (_ctx, issue, newRuns, api) => {
+exports.makeMessageForMainRun = exports.updateIssue = exports.postBisectComment = exports.fixOrDeleteOldComments = void 0;
+const getExistingComments_1 = __webpack_require__(932);
+const getTypeScriptNightlyVersion_1 = __webpack_require__(668);
+async function fixOrDeleteOldComments(issue, api) {
+    const issueCopy = Object.assign(Object.assign({}, issue), { comments: { nodes: [] } });
+    const existingComments = (0, getExistingComments_1.getAllTypeScriptBotComments)(issue.comments.nodes);
+    for (const comment of existingComments) {
+        if (comment.info.version !== 1) {
+            await api.deleteComment(comment.comment.id);
+        }
+        else {
+            issueCopy.comments.nodes.push(comment.comment);
+        }
+    }
+    return issueCopy;
+}
+exports.fixOrDeleteOldComments = fixOrDeleteOldComments;
+function postBisectComment(issue, result, api) {
+    const existingCommentInfo = (0, getExistingComments_1.getBisectCommentInfoForRequest)(issue.comments.nodes, result.request);
+    const embedded = (0, getExistingComments_1.embedInfo)({
+        kind: 'bisect-result',
+        version: 1,
+        requestCommentId: result.request.commentID
+    });
+    const message = `The change between ${result.oldRef} and ${result.newRef} occurred at ${result.badCommit}.\n\n${embedded}`;
+    return api.editOrCreateComment(issue.id, existingCommentInfo === null || existingCommentInfo === void 0 ? void 0 : existingCommentInfo.comment, message);
+}
+exports.postBisectComment = postBisectComment;
+const updateIssue = async (request, issue, newRuns, api) => {
     process.stdout.write(`\nUpdating issue ${issue.number}: `);
     if (newRuns.length === 0)
         return;
-    await updateMainComment(newRuns, api, issue);
+    return updateMainComment(request, newRuns, api, issue);
 };
 exports.updateIssue = updateIssue;
-async function updateMainComment(newRuns, api, issue) {
-    const nightlyNew = getLatest(newRuns);
-    const runInfo = (0, getPreviousRunInfo_1.getPreviousRunInfo)(issue);
-    const introduction = intro(nightlyNew.length);
-    const above = (0, exports.makeMessageForMainRuns)(nightlyNew);
-    const groupedBySource = groupBy(newRuns, ts => ts.commentID || '__body');
-    const bottom = makeMessageForOlderRuns(groupedBySource);
-    const newTSMeta = await (0, getTypeScriptMeta_1.getTypeScriptMeta)();
-    const embedded = (0, getPreviousRunInfo_1.runInfoString)({
-        runs: newRuns,
-        commentID: runInfo === null || runInfo === void 0 ? void 0 : runInfo.commentID,
-        typescriptNightlyVersion: newTSMeta.version,
-        typescriptSHA: newTSMeta.sha
+async function updateMainComment(request, newResults, api, issue) {
+    const nightly = getNightly(newResults);
+    const older = newResults.filter(r => r !== nightly);
+    const existingCommentInfo = (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
+    const introduction = intro(request);
+    const above = (0, exports.makeMessageForMainRun)(request.description, nightly);
+    const bottom = makeMessageForOlderRuns(older);
+    const nightlyVersion = await (0, getTypeScriptNightlyVersion_1.getTypeScriptNightlyVersion)();
+    const embedded = (0, getExistingComments_1.embedInfo)({
+        version: 1,
+        kind: 'twoslash-result',
+        code: request.block,
+        runs: newResults,
+        requestCommentId: request.commentID,
+        typescriptNightlyVersion: nightlyVersion.version,
+        typescriptSha: nightlyVersion.sha,
     });
     const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`;
-    await api.editOrCreateComment(issue.id, runInfo === null || runInfo === void 0 ? void 0 : runInfo.commentID, msg);
+    return api.editOrCreateComment(issue.id, existingCommentInfo === null || existingCommentInfo === void 0 ? void 0 : existingCommentInfo.comment, msg);
 }
-const intro = (runLength) => {
-    const repros = runLength === 1 ? 'repro' : `${runLength} repros`;
+const intro = (request) => {
     const docsLink = 'https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md';
-    return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! This comment reflects the current state of the ${repros} in this issue running against the nightly TypeScript.<hr />`;
+    const repro = request.commentUrl ? `[this repro](${request.commentUrl})` : `the repro in the issue body`;
+    return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! `
+        + `This comment reflects the current state of ${repro} running against the nightly TypeScript.<hr />`;
 };
 /** Above the fold */
-const makeMessageForMainRuns = (newLatestRuns) => {
-    const groupedBySource = groupBy(newLatestRuns, ts => ts.commentID || '__body');
-    const sources = Object.keys(groupedBySource).sort().reverse();
-    const inner = sources.map(source => {
-        const runs = groupedBySource[source];
-        const summerizeRuns = summerizeRunsAsHTML(runs);
-        const sortedRuns = summerizeRuns.sort((l, r) => r.label.localeCompare(l.label));
-        return sortedRuns.map(r => toRow(r.description, r.output)).join('\n <br/>');
-    });
-    return inner.join('\n\n');
+const makeMessageForMainRun = (description, nightlyResult) => {
+    const summarized = summarizeRunsAsHTML([nightlyResult])[0];
+    return [description, summarized.output].join('\n\n');
 };
-exports.makeMessageForMainRuns = makeMessageForMainRuns;
+exports.makeMessageForMainRun = makeMessageForMainRun;
 /** Makes the "Historical" section at the end of an issue */
-const makeMessageForOlderRuns = (runsBySource) => {
+const makeMessageForOlderRuns = (runs) => {
     // Sources are the issue body, or comments etc
-    const sources = Object.keys(runsBySource).sort().reverse();
-    const inner = sources.map(source => {
-        const runs = runsBySource[source];
-        const summerizeRuns = summerizeRunsAsHTML(runs);
-        return `
-<h4>${runs[0].description}</h4>
-<td>
+    const summarizeRuns = summarizeRunsAsHTML(runs);
+    const inner = `
   <table role="table">
     <thead>
       <tr>
@@ -14280,31 +14513,19 @@ const makeMessageForOlderRuns = (runsBySource) => {
       </tr>
     </thead>
     <tbody>
-      ${summerizeRuns
-            .sort((l, r) => r.label.localeCompare(l.label))
-            .map(r => toRow(r.label, r.output))
-            .join('\n')}
+      ${summarizeRuns
+        .sort((l, r) => r.label.localeCompare(l.label))
+        .map(r => toRow(r.label, r.output))
+        .join('\n')}
     </tbody>
   </table>
-</td>
 `;
-    });
     return `<details>
   <summary>Historical Information</summary>
-${inner.join('\n\n')}
+${inner}
   </detail>
   `;
 };
-// https://gist.github.com/JamieMason/0566f8412af9fe6a1d470aa1e089a752#gistcomment-2999506
-function groupBy(array, key) {
-    const keyFn = key instanceof Function ? key : (obj) => obj[key];
-    return array.reduce((objectsByKeyValue, obj) => {
-        const value = keyFn(obj);
-        // @ts-ignore
-        objectsByKeyValue[value] = (objectsByKeyValue[value] || []).concat(obj);
-        return objectsByKeyValue;
-    }, {});
-}
 const listify = (arr) => arr.length ? `<ul><li><code>${arr.join('</code></li><li><code>')}</code></li></ul>` : '';
 const simpleSummary = (run) => {
     const msg = [];
@@ -14332,53 +14553,22 @@ const toRow = (label, summary) => `
  * e.g [ { 3.6.2: "A B"}, { 3.7.1: "A B"},  { 3.8.1: "A B C"}]
  *  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
  */
-const summerizeRunsAsHTML = (runs) => {
-    const summerizedRows = [];
+const summarizeRunsAsHTML = (runs) => {
+    const summarizedRows = [];
     runs.forEach(run => {
         const summary = simpleSummary(run);
-        const existingSame = summerizedRows.find(r => r.output === summary);
+        const existingSame = summarizedRows.find(r => r.output === summary);
         if (!existingSame) {
-            summerizedRows.push({ label: run.label, description: run.description, output: summary });
+            summarizedRows.push({ label: run.label, output: summary });
         }
         else {
             existingSame.label = `${existingSame.label}, ${run.label}`;
         }
     });
-    return summerizedRows;
+    return summarizedRows;
 };
-const getLatest = (runs) => runs.filter(r => r.label === 'Nightly');
-
-
-/***/ }),
-
-/***/ 707:
-/***/ (function(__unusedmodule, exports) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.runInfoString = exports.getPreviousRunInfo = void 0;
-const getPreviousRunInfo = (issue) => {
-    const botComment = issue.comments.nodes.filter(c => c.body.includes('<!--- TypeScriptBot')).pop();
-    if (!botComment)
-        return undefined;
-    try {
-        const jsonString = botComment.body.split('<!--- TypeScriptBot %%% ')[1].split(' %%% --->')[0];
-        const json = JSON.parse(jsonString);
-        if ("typescriptNightlyVersion" in json === false)
-            return undefined;
-        return Object.assign(Object.assign({}, json), { commentID: botComment.id });
-    }
-    catch (error) {
-        return undefined;
-    }
-};
-exports.getPreviousRunInfo = getPreviousRunInfo;
-const runInfoString = (run) => {
-    return `<!--- TypeScriptBot %%% ${JSON.stringify(run)} %%% --->`;
-};
-exports.runInfoString = runInfoString;
-
+const getNightly = (runs) => runs.find(r => r.label === 'Nightly');
+//# sourceMappingURL=updatesIssue.js.map
 
 /***/ }),
 
@@ -14830,32 +15020,6 @@ module.exports = function (x) {
 
 	return x;
 };
-
-
-/***/ }),
-
-/***/ 772:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTypeScriptMeta = void 0;
-const node_fetch_1 = __importDefault(__webpack_require__(454));
-const getTypeScriptMeta = async () => {
-    const pkgJSON = __webpack_require__(688);
-    const version = pkgJSON.version;
-    const npmInfo = await (0, node_fetch_1.default)(`https://registry.npmjs.org/typescript/${version}`);
-    const res = await npmInfo.json();
-    return {
-        version,
-        sha: res.gitHead
-    };
-};
-exports.getTypeScriptMeta = getTypeScriptMeta;
 
 
 /***/ }),
@@ -16822,6 +16986,62 @@ exports.graphql = graphql$1;
 exports.withCustomRequest = withCustomRequest;
 //# sourceMappingURL=index.js.map
 
+
+/***/ }),
+
+/***/ 932:
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getAllTypeScriptBotComments = exports.getBisectCommentInfoForRequest = exports.embedInfo = exports.getResultCommentInfoForRequest = void 0;
+const getResultCommentInfoForRequest = (comments, request) => {
+    return findTypeScriptBotComment(comments, (info) => info.kind === 'twoslash-result' && info.requestCommentId === request.commentID);
+};
+exports.getResultCommentInfoForRequest = getResultCommentInfoForRequest;
+const embedInfo = (info) => {
+    return `<!--- TypeScriptBot %%% ${JSON.stringify(info)} %%% --->`;
+};
+exports.embedInfo = embedInfo;
+function getBisectCommentInfoForRequest(comments, request) {
+    return findTypeScriptBotComment(comments, (info) => info.kind === 'bisect-result' && info.requestCommentId === request.commentID);
+}
+exports.getBisectCommentInfoForRequest = getBisectCommentInfoForRequest;
+function getAllTypeScriptBotComments(comments) {
+    const results = [];
+    for (const comment of comments) {
+        if (comment.author.login === "typescript-bot") {
+            const info = tryParseInfo(comment.body);
+            if (info) {
+                results.push({ comment, info });
+            }
+        }
+    }
+    return results;
+}
+exports.getAllTypeScriptBotComments = getAllTypeScriptBotComments;
+function findTypeScriptBotComment(comments, predicate) {
+    for (let i = comments.length - 1; i >= 0; i--) {
+        const comment = comments[i];
+        if (comment.author.login === "typescript-bot") {
+            const info = tryParseInfo(comment.body);
+            if (info && predicate(info)) {
+                return { comment, info };
+            }
+        }
+    }
+}
+function tryParseInfo(body) {
+    const jsonContentStart = body.indexOf("<!--- TypeScriptBot %%%");
+    if (jsonContentStart > -1) {
+        try {
+            return JSON.parse(body.substring(jsonContentStart + "<!--- TypeScriptBot %%%".length, body.indexOf("%%% --->", jsonContentStart)));
+        }
+        catch (_a) { }
+    }
+}
+//# sourceMappingURL=getExistingComments.js.map
 
 /***/ }),
 
@@ -19579,49 +19799,6 @@ class HttpClient {
     }
 }
 exports.HttpClient = HttpClient;
-
-
-/***/ }),
-
-/***/ 984:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.issueToTwoslashRun = void 0;
-const markdownToCodeBlocks_1 = __webpack_require__(320);
-const issueToTwoslashRun = (ctx) => (issue) => {
-    // Body -> CodeBlocks
-    const bodyCode = (0, markdownToCodeBlocks_1.markdownToCodeBlocks)(issue.body);
-    const codeBlocks = bodyCode.filter(validCodeblocks(ctx.tag)).map((c, i) => ({
-        block: c,
-        description: `<a href='#issue-${issue.databaseId}'>Issue body</a> code block by @${issue.author.login}`
-    }));
-    // Comment -> CodeBlocks[]
-    const commentCodeBlocks = issue.comments.nodes.map(c => ({
-        twoslashRuns: (0, markdownToCodeBlocks_1.markdownToCodeBlocks)(c.body).filter(validCodeblocks(ctx.tag)),
-        commentID: c.id,
-        description: `<a href='${c.url}'>Comment</a> by @${c.author.login}</a>`
-    }));
-    // Flatten to Comment -> CodeBlock
-    //            Comment -> CodeBlock
-    commentCodeBlocks.forEach(comment => {
-        comment.twoslashRuns.forEach(run => {
-            codeBlocks.push({
-                commentID: comment.commentID,
-                block: run,
-                description: comment.description
-            });
-        });
-    });
-    return {
-        issueNumber: issue.number,
-        codeBlocksToRun: codeBlocks
-    };
-};
-exports.issueToTwoslashRun = issueToTwoslashRun;
-const validCodeblocks = (tag) => (codeBlock) => codeBlock.tags.includes(tag);
 
 
 /***/ })

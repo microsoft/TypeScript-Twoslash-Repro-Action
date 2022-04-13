@@ -19,7 +19,7 @@ export const getContext = () => {
     label,
     tag,
     bisectIssue,
-    workspace,
+    workspace
   }
 
   return ctx

@@ -2,7 +2,7 @@ import {execSync} from 'child_process'
 import {existsSync, mkdirSync} from 'fs'
 import fetch from 'node-fetch'
 import {join} from 'path'
-import { getTypeScriptNightlyVersion } from './utils/getTypeScriptNightlyVersion'
+import {getTypeScriptNightlyVersion} from './utils/getTypeScriptNightlyVersion'
 
 // Fills ./dist/ts with the last 5 major-min releases of TypeScript
 
@@ -20,7 +20,7 @@ export const downloadTypeScriptVersions = async () => {
 
   const nightly = await getTypeScriptNightlyVersion()
   downloadTSVersion(nightly.version)
-  extractTSVersion(nightly.version, "nightly")
+  extractTSVersion(nightly.version, 'nightly')
 }
 
 const extractTSVersion = (version: string, destFolderName = version) => {

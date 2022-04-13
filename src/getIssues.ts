@@ -28,7 +28,7 @@ export type Issue = {
 export async function getIssue(context: Context, issue: number): Promise<Issue> {
   const octokit = getOctokit(context.token)
   const req = issueQuery(context.owner, context.name, issue)
-  return (await octokit.graphql(req.query, req.vars) as any).repository.issue
+  return ((await octokit.graphql(req.query, req.vars)) as any).repository.issue
 }
 
 export async function getIssues(context: Context): Promise<Issue[]> {
@@ -122,4 +122,4 @@ const issueQuery = (owner: string, name: string, issue: number) => {
     query,
     vars
   }
-};
+}

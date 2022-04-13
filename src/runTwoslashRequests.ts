@@ -25,7 +25,7 @@ export type TwoslashResult = {
 export function runTwoslashRequests(issue: Issue, request: TwoslashRequest): TwoslashResult[] {
   const oldResults = getResultCommentInfoForRequest(issue.comments.nodes, request)
   const tsRoot = getTypeScriptDir()
-  const nightlyTs = require(join(tsRoot, "nightly"))
+  const nightlyTs = require(join(tsRoot, 'nightly'))
   let latestRun = runTwoSlash('Nightly')(request, nightlyTs)
 
   if (!oldResults) {
@@ -45,7 +45,7 @@ function getTypeScriptDir() {
 
 export const runTwoSlashOnOlderVersions = (request: TwoslashRequest) => {
   const tsRoot = getTypeScriptDir()
-  const tsVersions = readdirSync(tsRoot).filter(f => f !== "nightly")
+  const tsVersions = readdirSync(tsRoot).filter(f => f !== 'nightly')
   return tsVersions.map(tsVersion => {
     const ts = require(join(tsRoot, tsVersion))
     return runTwoSlash(tsVersion)(request, ts)
@@ -71,7 +71,7 @@ export const runTwoSlash =
         exception: error.name + ' - ' + error.message + '\n\n```\n' + error.stack + '\n```\n\n',
         time: getTime(),
         label,
-        state: RunState.RaisedException,
+        state: RunState.RaisedException
       }
     }
 
@@ -87,7 +87,7 @@ export const runTwoSlash =
       emit: result.code,
       time: getTime(),
       label,
-      state,
+      state
     }
 
     const showEmit = request.block.content.includes('// @showEmit') // this would also hit @showEmittedFiles only

@@ -1,13 +1,18 @@
 import {Issue} from './getIssues'
 import {TwoslashResult, RunState} from './runTwoslashRequests'
-import {getResultCommentInfoForRequest, getBisectCommentInfoForRequest, embedInfo, getAllTypeScriptBotComments} from './utils/getExistingComments'
+import {
+  getResultCommentInfoForRequest,
+  getBisectCommentInfoForRequest,
+  embedInfo,
+  getAllTypeScriptBotComments
+} from './utils/getExistingComments'
 import {API} from './utils/api'
 import {getTypeScriptNightlyVersion} from './utils/getTypeScriptNightlyVersion'
-import { TwoslashRequest } from './getRequestsFromIssue'
-import { BisectResult } from './gitBisectTypeScript'
+import {TwoslashRequest} from './getRequestsFromIssue'
+import {BisectResult} from './gitBisectTypeScript'
 
 export async function fixOrDeleteOldComments(issue: Issue, api: API): Promise<Issue> {
-  const issueCopy: Issue = { ...issue, comments: { nodes: [] } }
+  const issueCopy: Issue = {...issue, comments: {nodes: []}}
   const existingComments = getAllTypeScriptBotComments(issue.comments.nodes)
   for (const comment of existingComments) {
     if (comment.info.version !== 1) {
@@ -54,7 +59,7 @@ async function updateMainComment(request: TwoslashRequest, newResults: TwoslashR
     runs: newResults,
     requestCommentId: request.commentID,
     typescriptNightlyVersion: nightlyVersion.version,
-    typescriptSha: nightlyVersion.sha,
+    typescriptSha: nightlyVersion.sha
   })
   const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`
   return api.editOrCreateComment(issue.id, existingCommentInfo?.comment, msg)
@@ -63,14 +68,16 @@ async function updateMainComment(request: TwoslashRequest, newResults: TwoslashR
 const intro = (request: TwoslashRequest) => {
   const docsLink = 'https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md'
   const repro = request.commentUrl ? `[this repro](${request.commentUrl})` : `the repro in the issue body`
-  return `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! `
-    + `This comment reflects the current state of ${repro} running against the nightly TypeScript.<hr />`
+  return (
+    `:wave: Hi, I'm the [Repro bot](${docsLink}). I can help narrow down and track compiler bugs across releases! ` +
+    `This comment reflects the current state of ${repro} running against the nightly TypeScript.<hr />`
+  )
 }
 
 /** Above the fold */
 export const makeMessageForMainRun = (description: string, nightlyResult: TwoslashResult) => {
-    const summarized = summarizeRunsAsHTML([nightlyResult])[0]
-    return [description, summarized.output].join('\n\n')
+  const summarized = summarizeRunsAsHTML([nightlyResult])[0]
+  return [description, summarized.output].join('\n\n')
 }
 
 /** Makes the "Historical" section at the end of an issue */

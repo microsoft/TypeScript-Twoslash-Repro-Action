@@ -1,5 +1,5 @@
 import {getIssue, getIssues} from './getIssues'
-import {getContext} from './getContext'
+import {Context, getContext} from './getContext'
 import {getRequestsFromIssue} from './getRequestsFromIssue'
 import {fixOrDeleteOldComments, postBisectComment, updateIssue} from './updatesIssue'
 import {runTwoslashRequests} from './runTwoslashRequests'

@@ -12,16 +12,19 @@ import {TwoslashRequest} from './getRequestsFromIssue'
 import {BisectResult} from './gitBisectTypeScript'
 
 export async function fixOrDeleteOldComments(issue: Issue, api: API): Promise<Issue> {
-  const issueCopy: Issue = {...issue, comments: {nodes: []}}
-  const existingComments = getAllTypeScriptBotComments(issue.comments.nodes)
-  for (const comment of existingComments) {
-    if (comment.info.version !== 1) {
-      await api.deleteComment(comment.comment.id)
-    } else {
-      issueCopy.comments.nodes.push(comment.comment)
+  const outdatedComments = getAllTypeScriptBotComments(issue.comments.nodes)
+    .filter(c => c.info.version !== 1)
+    .map(c => c.comment)
+  for (const comment of outdatedComments) {
+    await api.deleteComment(comment.id)
+  }
+  if (outdatedComments.length) {
+    return {
+      ...issue,
+      comments: {nodes: issue.comments.nodes.filter(c => !outdatedComments.includes(c))}
     }
   }
-  return issueCopy
+  return issue
 }
 
 export function postBisectComment(issue: Issue, result: BisectResult, api: API) {

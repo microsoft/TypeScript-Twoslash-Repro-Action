@@ -11596,12 +11596,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getContext = void 0;
 const core_1 = __webpack_require__(393);
 const getContext = () => {
-    const token = (0, core_1.getInput)('github-token');
-    const repo = (0, core_1.getInput)('repo') || process.env.GITHUB_REPOSITORY;
+    const token = (0, core_1.getInput)('github-token') || process.env.GITHUB_TOKEN;
+    const repo = (0, core_1.getInput)('repo') || process.env.GITHUB_REPOSITORY || "microsoft/TypeScript";
     const workspace = process.env.GITHUB_WORKSPACE;
-    const label = (0, core_1.getInput)('label');
-    const tag = (0, core_1.getInput)('code-tag');
-    const bisectIssue = (0, core_1.getInput)('bisect');
+    const label = (0, core_1.getInput)('label') || "Has Repro";
+    const tag = (0, core_1.getInput)('code-tag') || "repro";
+    const bisectIssue = (0, core_1.getInput)('bisect') || process.env.BISECT_ISSUE;
     const owner = repo.split('/')[0];
     const name = repo.split('/')[1];
     const ctx = {
@@ -14279,8 +14279,29 @@ async function gitBisectTypeScript(context, issue) {
     const requests = (0, getRequestsFromIssue_1.getRequestsFromIssue)(context)(issue);
     const request = requests[requests.length - 1];
     const resultComment = request && (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
-    if (!resultComment)
+    const bisectRevisions = getRevisionsFromComment(issue, request, context) || resultComment && getRevisionsFromPreviousRun(resultComment, context);
+    if (!bisectRevisions)
         return;
+    const { output, sha } = await (0, gitBisect_1.gitBisect)(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
+        const result = buildAndRun(request, context);
+        return resultsAreEqual(bisectRevisions.oldResult, result);
+    });
+    return {
+        request,
+        stdout: output,
+        badCommit: sha,
+        newLabel: bisectRevisions.newLabel,
+        oldLabel: bisectRevisions.oldLabel,
+    };
+}
+exports.gitBisectTypeScript = gitBisectTypeScript;
+function resultsAreEqual(a, b) {
+    return (a.assertions.toString() === b.assertions.toString() &&
+        a.fails.toString() === b.fails.toString() &&
+        a.emit === b.emit &&
+        a.exception === b.exception);
+}
+function getRevisionsFromPreviousRun(resultComment, context) {
     let newResult;
     let oldResult;
     for (let i = resultComment.info.runs.length - 1; i >= 0; i--) {
@@ -14293,39 +14314,57 @@ async function gitBisectTypeScript(context, issue) {
             break;
         }
     }
-    if (!oldResult || !newResult)
-        return;
-    const oldRef = `v${oldResult.label}`;
-    const newRef = newResult.label === 'Nightly' ? resultComment.info.typescriptSha : `v${newResult.label}`;
-    const oldMergeBase = (0, child_process_1.execSync)(`git merge-base ${oldRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
-    const newMergeBase = (0, child_process_1.execSync)(`git merge-base ${newRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
-    const { output, sha } = await (0, gitBisect_1.gitBisect)(context.workspace, oldMergeBase, newMergeBase, () => {
-        console.log('npm ci');
-        (0, child_process_1.execSync)('npm ci', { cwd: context.workspace });
-        console.log('npx gulp local');
-        (0, child_process_1.execSync)('npx gulp local', { cwd: context.workspace, stdio: 'inherit' });
-        const tsPath = (0, path_1.join)(context.workspace, 'built/local/typescript.js');
-        delete require.cache[require.resolve(tsPath)];
-        const result = (0, runTwoslashRequests_1.runTwoSlash)('bisecting')({
-            block: request.block,
-            description: ''
-        }, require(tsPath));
-        return resultsAreEqual(oldResult, result);
-    });
-    return {
-        request,
-        stdout: output,
-        badCommit: sha,
-        newRef: newResult.label,
-        oldRef: oldResult.label
-    };
+    if (oldResult && newResult) {
+        const oldRef = `v${oldResult.label}`;
+        const newRef = newResult.label === 'Nightly' ? resultComment.info.typescriptSha : `v${newResult.label}`;
+        const oldMergeBase = (0, child_process_1.execSync)(`git merge-base ${oldRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
+        const newMergeBase = (0, child_process_1.execSync)(`git merge-base ${newRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
+        return {
+            oldRef: oldMergeBase,
+            newRef: newMergeBase,
+            oldLabel: oldResult.label,
+            newLabel: newResult.label,
+            oldResult,
+        };
+    }
 }
-exports.gitBisectTypeScript = gitBisectTypeScript;
-function resultsAreEqual(a, b) {
-    return (a.assertions.toString() === b.assertions.toString() &&
-        a.fails.toString() === b.fails.toString() &&
-        a.emit === b.emit &&
-        a.exception === b.exception);
+const bisectCommentRegExp = /^@typescript-bot bisect (?:this )?(?:good|old) ([^\s]+) (?:bad|new) ([^\s]+)/;
+function getRevisionsFromComment(issue, request, context) {
+    for (let i = issue.comments.nodes.length - 1; i >= 0; i--) {
+        const comment = issue.comments.nodes[i];
+        const match = comment.body.match(bisectCommentRegExp);
+        if (match) {
+            const [, oldLabel, newLabel] = match;
+            const oldRef = (0, child_process_1.execSync)(`git merge-base ${oldLabel} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
+            const newRef = (0, child_process_1.execSync)(`git merge-base ${newLabel} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
+            (0, child_process_1.execSync)(`git checkout ${oldRef}`, { cwd: context.workspace });
+            const oldResult = buildAndRun(request, context);
+            return {
+                oldRef,
+                newRef,
+                oldLabel,
+                newLabel,
+                oldResult,
+            };
+        }
+    }
+}
+function buildAndRun(request, context) {
+    try {
+        (0, child_process_1.execSync)('npm ci || rm -rf node_modules && npm install --before="`git show -s --format=%ci`"', { cwd: context.workspace });
+    }
+    catch (_a) {
+        console.error('npm install failed, but continuing anyway');
+        // Playwright is particularly likely to fail to install, but it doesn't
+        // matter. May as well attempt the build and see if it works.
+    }
+    (0, child_process_1.execSync)('npx gulp local', { cwd: context.workspace, stdio: 'inherit' });
+    const tsPath = (0, path_1.join)(context.workspace, 'built/local/typescript.js');
+    delete require.cache[require.resolve(tsPath)];
+    return (0, runTwoslashRequests_1.runTwoSlash)('bisecting')({
+        block: request.block,
+        description: ''
+    }, require(tsPath));
 }
 //# sourceMappingURL=gitBisectTypeScript.js.map
 
@@ -14456,7 +14495,7 @@ function postBisectComment(issue, result, api) {
         version: 1,
         requestCommentId: result.request.commentID
     });
-    const message = `The change between ${result.oldRef} and ${result.newRef} occurred at ${result.badCommit}.\n\n${embedded}`;
+    const message = `The change between ${result.oldLabel} and ${result.newLabel} occurred at ${result.badCommit}.\n\n${embedded}`;
     return api.editOrCreateComment(issue.id, existingCommentInfo === null || existingCommentInfo === void 0 ? void 0 : existingCommentInfo.comment, message);
 }
 exports.postBisectComment = postBisectComment;

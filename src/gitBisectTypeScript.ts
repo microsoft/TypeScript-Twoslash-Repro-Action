@@ -19,8 +19,10 @@ export async function gitBisectTypeScript(context: Context, issue: Issue): Promi
   const requests = getRequestsFromIssue(context)(issue)
   const request = requests[requests.length - 1]
   const resultComment = request && getResultCommentInfoForRequest(issue.comments.nodes, request)
-  const bisectRevisions = getRevisionsFromComment(issue, request, context) || resultComment && getRevisionsFromPreviousRun(resultComment, context)
-  if (!bisectRevisions) return;
+  const bisectRevisions =
+    getRevisionsFromComment(issue, request, context) ||
+    (resultComment && getRevisionsFromPreviousRun(resultComment, context))
+  if (!bisectRevisions) return
 
   const {output, sha} = await gitBisect(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
     const result = buildAndRun(request, context)
@@ -32,7 +34,7 @@ export async function gitBisectTypeScript(context: Context, issue: Issue): Promi
     stdout: output,
     badCommit: sha,
     newLabel: bisectRevisions.newLabel,
-    oldLabel: bisectRevisions.oldLabel,
+    oldLabel: bisectRevisions.oldLabel
   }
 }
 
@@ -46,14 +48,17 @@ function resultsAreEqual(a: TwoslashResult, b: TwoslashResult) {
 }
 
 interface BisectRevisions {
-  oldRef: string;
-  newRef: string;
-  oldLabel: string;
-  newLabel: string;
-  oldResult: TwoslashResult;
+  oldRef: string
+  newRef: string
+  oldLabel: string
+  newLabel: string
+  oldResult: TwoslashResult
 }
 
-function getRevisionsFromPreviousRun(resultComment: InfoComment<EmbeddedTwoslashResult>, context: Context): BisectRevisions | undefined {
+function getRevisionsFromPreviousRun(
+  resultComment: InfoComment<EmbeddedTwoslashResult>,
+  context: Context
+): BisectRevisions | undefined {
   let newResult: TwoslashResult | undefined
   let oldResult: TwoslashResult | undefined
   for (let i = resultComment.info.runs.length - 1; i >= 0; i--) {
@@ -75,28 +80,32 @@ function getRevisionsFromPreviousRun(resultComment: InfoComment<EmbeddedTwoslash
       newRef: newMergeBase,
       oldLabel: oldResult.label,
       newLabel: newResult.label,
-      oldResult,
-    };
+      oldResult
+    }
   }
 }
 
-const bisectCommentRegExp = /^@typescript-bot bisect (?:this )?(?:good|old) ([^\s]+) (?:bad|new) ([^\s]+)/;
-function getRevisionsFromComment(issue: Issue, request: TwoslashRequest, context: Context): BisectRevisions | undefined {
+const bisectCommentRegExp = /^@typescript-bot bisect (?:this )?(?:good|old) ([^\s]+) (?:bad|new) ([^\s]+)/
+function getRevisionsFromComment(
+  issue: Issue,
+  request: TwoslashRequest,
+  context: Context
+): BisectRevisions | undefined {
   for (let i = issue.comments.nodes.length - 1; i >= 0; i--) {
-    const comment = issue.comments.nodes[i];
-    const match = comment.body.match(bisectCommentRegExp);
+    const comment = issue.comments.nodes[i]
+    const match = comment.body.match(bisectCommentRegExp)
     if (match) {
-      const [, oldLabel, newLabel] = match;
+      const [, oldLabel, newLabel] = match
       const oldRef = execSync(`git merge-base ${oldLabel} main`, {cwd: context.workspace, encoding: 'utf8'}).trim()
       const newRef = execSync(`git merge-base ${newLabel} main`, {cwd: context.workspace, encoding: 'utf8'}).trim()
-      execSync(`git checkout ${oldRef}`, { cwd: context.workspace })
+      execSync(`git checkout ${oldRef}`, {cwd: context.workspace})
       const oldResult = buildAndRun(request, context)
       return {
         oldRef,
         newRef,
         oldLabel,
         newLabel,
-        oldResult,
+        oldResult
       }
     }
   }
@@ -104,7 +113,9 @@ function getRevisionsFromComment(issue: Issue, request: TwoslashRequest, context
 
 function buildAndRun(request: TwoslashRequest, context: Context) {
   try {
-    execSync('npm ci || rm -rf node_modules && npm install --before="`git show -s --format=%ci`"', {cwd: context.workspace})
+    execSync('npm ci || rm -rf node_modules && npm install --before="`git show -s --format=%ci`"', {
+      cwd: context.workspace
+    })
   } catch {
     console.error('npm install failed, but continuing anyway')
     // Playwright is particularly likely to fail to install, but it doesn't

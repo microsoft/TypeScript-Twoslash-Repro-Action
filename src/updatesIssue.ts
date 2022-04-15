@@ -34,7 +34,7 @@ export function postBisectComment(issue: Issue, result: BisectResult, api: API) 
     version: 1,
     requestCommentId: result.request.commentID
   })
-  const message = `The change between ${result.oldRef} and ${result.newRef} occurred at ${result.badCommit}.\n\n${embedded}`
+  const message = `The change between ${result.oldLabel} and ${result.newLabel} occurred at ${result.badCommit}.\n\n${embedded}`
   return api.editOrCreateComment(issue.id, existingCommentInfo?.comment, message)
 }
 

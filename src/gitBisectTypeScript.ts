@@ -44,8 +44,16 @@ function resultsAreEqual(a: TwoslashResult, b: TwoslashResult) {
     a.assertions.toString() === b.assertions.toString() &&
     a.fails.toString() === b.fails.toString() &&
     a.emit === b.emit &&
-    a.exception === b.exception
+    exceptionsAreEqual(a.exception, b.exception)
   )
+}
+
+function exceptionsAreEqual(a: string | undefined, b: string | undefined) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const [aMessage, ...aStack] = a.split('\n'), [bMessage, ...bStack] = b.split('\n');
+  if (aMessage !== bMessage || aStack.length !== bStack.length) return false;
+  return aStack.every((line, i) => line.replace(/\(.*$/, '') === bStack[i].replace(/\(.*$/, ''))
 }
 
 interface BisectRevisions {

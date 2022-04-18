@@ -26,6 +26,7 @@ export async function gitBisectTypeScript(context: Context, issue: Issue): Promi
 
   const {output, sha} = await gitBisect(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
     const result = buildAndRun(request, context)
+    execSync(`git checkout . && git clean -f`, { cwd: context.workspace })
     return resultsAreEqual(bisectRevisions.oldResult, result)
   })
 
@@ -113,7 +114,7 @@ function getRevisionsFromComment(
 
 function buildAndRun(request: TwoslashRequest, context: Context) {
   try {
-    execSync('npm ci || rm -rf node_modules && npm install --before="`git show -s --format=%ci`"', {
+    execSync('npm ci || rm -rf node_modules && npm install --no-save --before="`git show -s --format=%ci`"', {
       cwd: context.workspace
     })
   } catch {

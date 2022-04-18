@@ -26,7 +26,7 @@ export async function gitBisectTypeScript(context: Context, issue: Issue): Promi
 
   const {output, sha} = await gitBisect(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
     const result = buildAndRun(request, context)
-    execSync(`git checkout . && git clean -f`, { cwd: context.workspace })
+    execSync(`git checkout . && git clean -f`, {cwd: context.workspace})
     return resultsAreEqual(bisectRevisions.oldResult, result)
   })
 

@@ -54,7 +54,7 @@ function exceptionsAreEqual(a: string | undefined, b: string | undefined) {
   const [aMessage, ...aStack] = a.split('\n'),
     [bMessage, ...bStack] = b.split('\n')
   if (aMessage !== bMessage || aStack.length !== bStack.length) return false
-  return aStack.every((line, i) => line.replace(/\(.*$/, '') === bStack[i].replace(/\(.*$/, ''))
+  return aStack.every((line, i) => line.replace(/\(?[\\/].*$/, '') === bStack[i].replace(/\(?[\\/].*$/, ''))
 }
 
 interface BisectRevisions {

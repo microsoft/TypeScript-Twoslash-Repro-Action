@@ -11597,10 +11597,11 @@ exports.getContext = void 0;
 const core_1 = __webpack_require__(393);
 const getContext = () => {
     const token = (0, core_1.getInput)('github-token') || process.env.GITHUB_TOKEN;
-    const repo = (0, core_1.getInput)('repo') || process.env.GITHUB_REPOSITORY || "microsoft/TypeScript";
+    const repo = (0, core_1.getInput)('repo') || process.env.GITHUB_REPOSITORY || 'microsoft/TypeScript';
     const workspace = process.env.GITHUB_WORKSPACE;
-    const label = (0, core_1.getInput)('label') || "Has Repro";
-    const tag = (0, core_1.getInput)('code-tag') || "repro";
+    const label = (0, core_1.getInput)('label') || 'Has Repro';
+    const tag = (0, core_1.getInput)('code-tag') || 'repro';
+    const runIssue = (0, core_1.getInput)('issue') || process.env.ISSUE;
     const bisectIssue = (0, core_1.getInput)('bisect') || process.env.BISECT_ISSUE;
     const owner = repo.split('/')[0];
     const name = repo.split('/')[1];
@@ -11610,6 +11611,7 @@ const getContext = () => {
         name,
         label,
         tag,
+        runIssue,
         bisectIssue,
         workspace
     };
@@ -11773,6 +11775,9 @@ async function getIssue(context, issue) {
 exports.getIssue = getIssue;
 async function getIssues(context) {
     const octokit = (0, github_1.getOctokit)(context.token);
+    if (context.runIssue) {
+        return [await getIssue(context, parseInt(context.runIssue, 10))];
+    }
     const req = issuesQuery(context.owner, context.name, context.label);
     const initialIssues = (await octokit.graphql(req.query, Object.assign({}, req.vars)));
     // TODO: check if nodes length == 100, then start looping
@@ -14279,11 +14284,13 @@ async function gitBisectTypeScript(context, issue) {
     const requests = (0, getRequestsFromIssue_1.getRequestsFromIssue)(context)(issue);
     const request = requests[requests.length - 1];
     const resultComment = request && (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
-    const bisectRevisions = getRevisionsFromComment(issue, request, context) || resultComment && getRevisionsFromPreviousRun(resultComment, context);
+    const bisectRevisions = getRevisionsFromComment(issue, request, context) ||
+        (resultComment && getRevisionsFromPreviousRun(resultComment, context));
     if (!bisectRevisions)
         return;
     const { output, sha } = await (0, gitBisect_1.gitBisect)(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
         const result = buildAndRun(request, context);
+        (0, child_process_1.execSync)(`git checkout . && git clean -f`, { cwd: context.workspace });
         return resultsAreEqual(bisectRevisions.oldResult, result);
     });
     return {
@@ -14291,7 +14298,7 @@ async function gitBisectTypeScript(context, issue) {
         stdout: output,
         badCommit: sha,
         newLabel: bisectRevisions.newLabel,
-        oldLabel: bisectRevisions.oldLabel,
+        oldLabel: bisectRevisions.oldLabel
     };
 }
 exports.gitBisectTypeScript = gitBisectTypeScript;
@@ -14324,7 +14331,7 @@ function getRevisionsFromPreviousRun(resultComment, context) {
             newRef: newMergeBase,
             oldLabel: oldResult.label,
             newLabel: newResult.label,
-            oldResult,
+            oldResult
         };
     }
 }
@@ -14344,14 +14351,16 @@ function getRevisionsFromComment(issue, request, context) {
                 newRef,
                 oldLabel,
                 newLabel,
-                oldResult,
+                oldResult
             };
         }
     }
 }
 function buildAndRun(request, context) {
     try {
-        (0, child_process_1.execSync)('npm ci || rm -rf node_modules && npm install --before="`git show -s --format=%ci`"', { cwd: context.workspace });
+        (0, child_process_1.execSync)('npm ci || rm -rf node_modules && npm install --no-save --before="`git show -s --format=%ci`"', {
+            cwd: context.workspace
+        });
     }
     catch (_a) {
         console.error('npm install failed, but continuing anyway');

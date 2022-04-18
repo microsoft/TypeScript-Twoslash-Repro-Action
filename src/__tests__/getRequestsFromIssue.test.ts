@@ -11,6 +11,7 @@ const testCtx: Context = {
   tag: 'repro',
   workspace: '',
   bisectIssue: undefined,
+  runIssue: undefined,
 }
 
 const oneCodeBlock = ` comment blah

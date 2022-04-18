@@ -33,8 +33,11 @@ export async function getIssue(context: Context, issue: number): Promise<Issue> 
 
 export async function getIssues(context: Context): Promise<Issue[]> {
   const octokit = getOctokit(context.token)
-  const req = issuesQuery(context.owner, context.name, context.label)
+  if (context.runIssue) {
+    return [await getIssue(context, parseInt(context.runIssue, 10))]
+  }
 
+  const req = issuesQuery(context.owner, context.name, context.label)
   const initialIssues = (await octokit.graphql(req.query, {...req.vars})) as any
   // TODO: check if nodes length == 100, then start looping
 

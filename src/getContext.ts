@@ -8,6 +8,7 @@ export const getContext = () => {
   const workspace = process.env.GITHUB_WORKSPACE!
   const label = getInput('label') || 'Has Repro'
   const tag = getInput('code-tag') || 'repro'
+  const runIssue = getInput('issue') || process.env.ISSUE
   const bisectIssue = getInput('bisect') || (process.env.BISECT_ISSUE as string | undefined)
   const owner = repo.split('/')[0]
   const name = repo.split('/')[1]
@@ -18,6 +19,7 @@ export const getContext = () => {
     name,
     label,
     tag,
+    runIssue,
     bisectIssue,
     workspace
   }

@@ -14316,7 +14316,7 @@ function exceptionsAreEqual(a, b) {
     const [aMessage, ...aStack] = a.split('\n'), [bMessage, ...bStack] = b.split('\n');
     if (aMessage !== bMessage || aStack.length !== bStack.length)
         return false;
-    return aStack.every((line, i) => line.replace(/\(.*$/, '') === bStack[i].replace(/\(.*$/, ''));
+    return aStack.every((line, i) => line.replace(/\(?[\\/].*$/, '') === bStack[i].replace(/\(?[\\/].*$/, ''));
 }
 function getRevisionsFromPreviousRun(resultComment, context) {
     let newResult;

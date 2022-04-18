@@ -14306,7 +14306,17 @@ function resultsAreEqual(a, b) {
     return (a.assertions.toString() === b.assertions.toString() &&
         a.fails.toString() === b.fails.toString() &&
         a.emit === b.emit &&
-        a.exception === b.exception);
+        exceptionsAreEqual(a.exception, b.exception));
+}
+function exceptionsAreEqual(a, b) {
+    if (a === b)
+        return true;
+    if (!a || !b)
+        return false;
+    const [aMessage, ...aStack] = a.split('\n'), [bMessage, ...bStack] = b.split('\n');
+    if (aMessage !== bMessage || aStack.length !== bStack.length)
+        return false;
+    return aStack.every((line, i) => line.replace(/\(.*$/, '') === bStack[i].replace(/\(.*$/, ''));
 }
 function getRevisionsFromPreviousRun(resultComment, context) {
     let newResult;
@@ -14358,16 +14368,22 @@ function getRevisionsFromComment(issue, request, context) {
 }
 function buildAndRun(request, context) {
     try {
-        (0, child_process_1.execSync)('npm ci || rm -rf node_modules && npm install --no-save --before="`git show -s --format=%ci`"', {
-            cwd: context.workspace
-        });
+        // Try building without npm install for speed, it will work a fair amount of the time
+        (0, child_process_1.execSync)('npx gulp local', { cwd: context.workspace });
     }
     catch (_a) {
-        console.error('npm install failed, but continuing anyway');
-        // Playwright is particularly likely to fail to install, but it doesn't
-        // matter. May as well attempt the build and see if it works.
+        try {
+            (0, child_process_1.execSync)('npm ci || rm -rf node_modules && npm install --no-save --before="`git show -s --format=%ci`"', {
+                cwd: context.workspace
+            });
+        }
+        catch (_b) {
+            console.error('npm install failed, but continuing anyway');
+            // Playwright is particularly likely to fail to install, but it doesn't
+            // matter. May as well attempt the build and see if it works.
+        }
+        (0, child_process_1.execSync)('npx gulp local', { cwd: context.workspace, stdio: 'inherit' });
     }
-    (0, child_process_1.execSync)('npx gulp local', { cwd: context.workspace, stdio: 'inherit' });
     const tsPath = (0, path_1.join)(context.workspace, 'built/local/typescript.js');
     delete require.cache[require.resolve(tsPath)];
     return (0, runTwoslashRequests_1.runTwoSlash)('bisecting')({

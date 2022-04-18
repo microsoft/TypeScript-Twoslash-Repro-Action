@@ -41,10 +41,11 @@ Actions are run from GitHub repos so we will check-in the packed dist folder.
 
 Then run [ncc](https://github.com/zeit/ncc) and push the results:
 ```bash
-$ yarn deploy
-$ git add dist
-$ git commit -a -m "prod dependencies"
-$ git push origin releases/v1
+yarn build
+yarn deploy
+git add dist
+git commit -a -m "prod dependencies"
+git push
 ```
 
 Your action is now published! :rocket: 

@@ -14306,6 +14306,7 @@ function resultsAreEqual(a, b) {
     return (a.assertions.toString() === b.assertions.toString() &&
         a.fails.toString() === b.fails.toString() &&
         a.emit === b.emit &&
+        Math.abs(a.time - b.time) < Math.min(a.time, b.time) * 10 &&
         exceptionsAreEqual(a.exception, b.exception));
 }
 function exceptionsAreEqual(a, b) {

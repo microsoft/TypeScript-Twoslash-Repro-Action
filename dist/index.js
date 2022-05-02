@@ -14498,7 +14498,7 @@ module.exports = (promise, onFinally) => {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.makeMessageForMainRun = exports.updateIssue = exports.postBisectComment = exports.fixOrDeleteOldComments = void 0;
+exports.createCommentText = exports.updateIssue = exports.postBisectComment = exports.fixOrDeleteOldComments = void 0;
 const getExistingComments_1 = __webpack_require__(932);
 const getTypeScriptNightlyVersion_1 = __webpack_require__(668);
 async function fixOrDeleteOldComments(issue, api) {
@@ -14533,12 +14533,8 @@ const updateIssue = async (request, issue, newRuns, api) => {
 };
 exports.updateIssue = updateIssue;
 async function updateMainComment(request, newResults, api, issue) {
-    const nightly = getNightly(newResults);
-    const older = newResults.filter(r => r !== nightly);
     const existingCommentInfo = (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
-    const introduction = intro(request);
-    const above = (0, exports.makeMessageForMainRun)(request.description, nightly);
-    const bottom = makeMessageForOlderRuns(older);
+    const bodyText = createCommentText(newResults, request);
     const nightlyVersion = await (0, getTypeScriptNightlyVersion_1.getTypeScriptNightlyVersion)();
     const embedded = (0, getExistingComments_1.embedInfo)({
         version: 1,
@@ -14549,9 +14545,23 @@ async function updateMainComment(request, newResults, api, issue) {
         typescriptNightlyVersion: nightlyVersion.version,
         typescriptSha: nightlyVersion.sha
     });
-    const msg = `${introduction}\n\n${above}\n\n${bottom}\n\n${embedded}`;
+    const msg = `${bodyText}\n\n${embedded}`;
     return api.editOrCreateComment(issue.id, existingCommentInfo === null || existingCommentInfo === void 0 ? void 0 : existingCommentInfo.comment, msg);
 }
+function createCommentText(newResults, request) {
+    const nightly = getNightly(newResults);
+    const older = newResults.filter(r => r !== nightly);
+    const fastest = newResults.reduce((fastest, run) => (run.time < fastest.time ? run : fastest), newResults[0]);
+    const slowest = newResults.reduce((slowest, run) => (run.time > slowest.time ? run : slowest), newResults[0]);
+    const slowThreshold = fastest.time * 10;
+    const isSlow = (run) => run.time >= slowThreshold;
+    const reportPerf = isSlow(slowest);
+    const introduction = intro(request);
+    const above = makeMessageForMainRun(request.description, nightly, reportPerf ? isSlow : undefined);
+    const bottom = makeMessageForOlderRuns(older, reportPerf ? isSlow : undefined);
+    return `${introduction}\n\n${above}\n\n${bottom}`;
+}
+exports.createCommentText = createCommentText;
 const intro = (request) => {
     const docsLink = 'https://github.com/microsoft/TypeScript-Twoslash-Repro-Action/tree/master/docs/user-facing.md';
     const repro = request.commentUrl ? `[this repro](${request.commentUrl})` : `the repro in the issue body`;
@@ -14559,27 +14569,27 @@ const intro = (request) => {
         `This comment reflects the current state of ${repro} running against the nightly TypeScript.<hr />`);
 };
 /** Above the fold */
-const makeMessageForMainRun = (description, nightlyResult) => {
-    const summarized = summarizeRunsAsHTML([nightlyResult])[0];
-    return [description, summarized.output].join('\n\n');
+const makeMessageForMainRun = (description, nightlyResult, isSlow) => {
+    const summarized = summarizeRunsAsHTML([nightlyResult], isSlow)[0];
+    return [description, summarized.output, summarized.time ? `${summarized.time} than historical runs` : ''].join('\n\n');
 };
-exports.makeMessageForMainRun = makeMessageForMainRun;
 /** Makes the "Historical" section at the end of an issue */
-const makeMessageForOlderRuns = (runs) => {
+const makeMessageForOlderRuns = (runs, isSlow) => {
     // Sources are the issue body, or comments etc
-    const summarizeRuns = summarizeRunsAsHTML(runs);
+    const summarizeRuns = summarizeRunsAsHTML(runs, isSlow);
     const inner = `
   <table role="table">
     <thead>
       <tr>
         <th width="250">Version</th>
         <th width="80%">Reproduction Outputs</th>
+        ${isSlow ? '<th>Time</th>' : ''}
       </tr>
     </thead>
     <tbody>
       ${summarizeRuns
         .sort((l, r) => r.label.localeCompare(l.label))
-        .map(r => toRow(r.label, r.output))
+        .map(r => toRow(r.label, r.output, r.time))
         .join('\n')}
     </tbody>
   </table>
@@ -14605,25 +14615,27 @@ const simpleSummary = (run) => {
         msg.push('Emit: \n\n```ts\n' + run.emit + '\n```\n\n');
     return '<p>' + msg.join('<br/>') + '</p>';
 };
-const toRow = (label, summary) => `
+const toRow = (label, summary, time) => `
 <tr>
 <td>${label}</td>
 <td>
   <p>${summary}</p>
 </td>
+${time !== undefined ? `<td>${time}</td>` : ''}
 </tr>`;
 /**
  * Looks through the results of the runs and creates consolidated results
  * e.g [ { 3.6.2: "A B"}, { 3.7.1: "A B"},  { 3.8.1: "A B C"}]
  *  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
  */
-const summarizeRunsAsHTML = (runs) => {
+const summarizeRunsAsHTML = (runs, isSlow) => {
     const summarizedRows = [];
     runs.forEach(run => {
         const summary = simpleSummary(run);
-        const existingSame = summarizedRows.find(r => r.output === summary);
+        const time = isSlow ? isSlow(run) ? '⚠️ Way slower' : '' : undefined;
+        const existingSame = summarizedRows.find(r => r.output === summary && r.time === time);
         if (!existingSame) {
-            summarizedRows.push({ label: run.label, output: summary });
+            summarizedRows.push({ label: run.label, output: summary, time });
         }
         else {
             existingSame.label = `${existingSame.label}, ${run.label}`;

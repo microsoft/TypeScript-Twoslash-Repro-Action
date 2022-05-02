@@ -49,7 +49,7 @@ async function updateMainComment(request: TwoslashRequest, newResults: TwoslashR
   const existingCommentInfo = getResultCommentInfoForRequest(issue.comments.nodes, request)
   const bodyText = createCommentText(newResults, request)
   const nightlyVersion = await getTypeScriptNightlyVersion()
-  
+
   const embedded = embedInfo({
     version: 1,
     kind: 'twoslash-result',
@@ -73,7 +73,6 @@ export function createCommentText(newResults: TwoslashResult[], request: Twoslas
   const isSlow = (run: TwoslashResult) => run.time >= slowThreshold
   const reportPerf = isSlow(slowest)
 
-  
   const introduction = intro(request)
   const above = makeMessageForMainRun(request.description, nightly, reportPerf ? isSlow : undefined)
   const bottom = makeMessageForOlderRuns(older, reportPerf ? isSlow : undefined)
@@ -90,7 +89,11 @@ const intro = (request: TwoslashRequest) => {
 }
 
 /** Above the fold */
-const makeMessageForMainRun = (description: string, nightlyResult: TwoslashResult, isSlow?: (result: TwoslashResult) => boolean) => {
+const makeMessageForMainRun = (
+  description: string,
+  nightlyResult: TwoslashResult,
+  isSlow?: (result: TwoslashResult) => boolean
+) => {
   const summarized = summarizeRunsAsHTML([nightlyResult], isSlow)[0]
   return [description, summarized.output, summarized.time ? `${summarized.time} than historical runs` : ''].join('\n\n')
 }
@@ -152,10 +155,10 @@ ${time !== undefined ? `<td>${time}</td>` : ''}
  *  -> [ {"3.6.2, 3.7.1": "A B"}, { 3.8.1: "A B C" }]
  */
 const summarizeRunsAsHTML = (runs: TwoslashResult[], isSlow: ((run: TwoslashResult) => boolean) | undefined) => {
-  const summarizedRows: {label: string; output: string, time?: string }[] = []
+  const summarizedRows: {label: string; output: string; time?: string}[] = []
   runs.forEach(run => {
     const summary = simpleSummary(run)
-    const time = isSlow ? isSlow(run) ? '⚠️ Way slower' : '' : undefined;
+    const time = isSlow ? (isSlow(run) ? '⚠️ Way slower' : '') : undefined
     const existingSame = summarizedRows.find(r => r.output === summary && r.time === time)
     if (!existingSame) {
       summarizedRows.push({label: run.label, output: summary, time})

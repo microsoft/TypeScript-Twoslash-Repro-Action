@@ -14582,8 +14582,7 @@ const makeMessageForOlderRuns = (runs, isSlow) => {
     <thead>
       <tr>
         <th width="250">Version</th>
-        <th width="80%">Reproduction Outputs</th>
-        ${isSlow ? '<th>Time</th>' : ''}
+        <th width="80%">Reproduction Outputs</th>${isSlow ? '\n<th>Time</th>' : ''}
       </tr>
     </thead>
     <tbody>
@@ -14632,7 +14631,7 @@ const summarizeRunsAsHTML = (runs, isSlow) => {
     const summarizedRows = [];
     runs.forEach(run => {
         const summary = simpleSummary(run);
-        const time = isSlow ? isSlow(run) ? '⚠️ Way slower' : '' : undefined;
+        const time = isSlow ? (isSlow(run) ? '⚠️ Way slower' : '') : undefined;
         const existingSame = summarizedRows.find(r => r.output === summary && r.time === time);
         if (!existingSame) {
             summarizedRows.push({ label: run.label, output: summary, time });

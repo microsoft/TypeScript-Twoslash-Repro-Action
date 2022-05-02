@@ -88,7 +88,7 @@ describe('updatesIssue', () => {
             <tr>
               <th width=\\"250\\">Version</th>
               <th width=\\"80%\\">Reproduction Outputs</th>
-              <th>Time</th>
+      <th>Time</th>
             </tr>
           </thead>
           <tbody>

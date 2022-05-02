@@ -107,8 +107,7 @@ const makeMessageForOlderRuns = (runs: TwoslashResult[], isSlow?: (result: Twosl
     <thead>
       <tr>
         <th width="250">Version</th>
-        <th width="80%">Reproduction Outputs</th>
-        ${isSlow ? '<th>Time</th>' : ''}
+        <th width="80%">Reproduction Outputs</th>${isSlow ? '\n<th>Time</th>' : ''}
       </tr>
     </thead>
     <tbody>

@@ -1195,9 +1195,139 @@ function _extends() {
   return _extends.apply(this, arguments);
 }
 
-function escapeHtml(text) {
-  return text.replace(/</g, "&lt;");
+function _inheritsLoose(subClass, superClass) {
+  subClass.prototype = Object.create(superClass.prototype);
+  subClass.prototype.constructor = subClass;
+
+  _setPrototypeOf(subClass, superClass);
 }
+
+function _getPrototypeOf(o) {
+  _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function _getPrototypeOf(o) {
+    return o.__proto__ || Object.getPrototypeOf(o);
+  };
+  return _getPrototypeOf(o);
+}
+
+function _setPrototypeOf(o, p) {
+  _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) {
+    o.__proto__ = p;
+    return o;
+  };
+
+  return _setPrototypeOf(o, p);
+}
+
+function _isNativeReflectConstruct() {
+  if (typeof Reflect === "undefined" || !Reflect.construct) return false;
+  if (Reflect.construct.sham) return false;
+  if (typeof Proxy === "function") return true;
+
+  try {
+    Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {}));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function _construct(Parent, args, Class) {
+  if (_isNativeReflectConstruct()) {
+    _construct = Reflect.construct;
+  } else {
+    _construct = function _construct(Parent, args, Class) {
+      var a = [null];
+      a.push.apply(a, args);
+      var Constructor = Function.bind.apply(Parent, a);
+      var instance = new Constructor();
+      if (Class) _setPrototypeOf(instance, Class.prototype);
+      return instance;
+    };
+  }
+
+  return _construct.apply(null, arguments);
+}
+
+function _isNativeFunction(fn) {
+  return Function.toString.call(fn).indexOf("[native code]") !== -1;
+}
+
+function _wrapNativeSuper(Class) {
+  var _cache = typeof Map === "function" ? new Map() : undefined;
+
+  _wrapNativeSuper = function _wrapNativeSuper(Class) {
+    if (Class === null || !_isNativeFunction(Class)) return Class;
+
+    if (typeof Class !== "function") {
+      throw new TypeError("Super expression must either be null or a function");
+    }
+
+    if (typeof _cache !== "undefined") {
+      if (_cache.has(Class)) return _cache.get(Class);
+
+      _cache.set(Class, Wrapper);
+    }
+
+    function Wrapper() {
+      return _construct(Class, arguments, _getPrototypeOf(this).constructor);
+    }
+
+    Wrapper.prototype = Object.create(Class.prototype, {
+      constructor: {
+        value: Wrapper,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+    return _setPrototypeOf(Wrapper, Class);
+  };
+
+  return _wrapNativeSuper(Class);
+}
+
+function _unsupportedIterableToArray(o, minLen) {
+  if (!o) return;
+  if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+  var n = Object.prototype.toString.call(o).slice(8, -1);
+  if (n === "Object" && o.constructor) n = o.constructor.name;
+  if (n === "Map" || n === "Set") return Array.from(o);
+  if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+}
+
+function _arrayLikeToArray(arr, len) {
+  if (len == null || len > arr.length) len = arr.length;
+
+  for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+  return arr2;
+}
+
+function _createForOfIteratorHelperLoose(o, allowArrayLike) {
+  var it;
+
+  if (typeof Symbol === "undefined" || o[Symbol.iterator] == null) {
+    if (Array.isArray(o) || (it = _unsupportedIterableToArray(o)) || allowArrayLike && o && typeof o.length === "number") {
+      if (it) o = it;
+      var i = 0;
+      return function () {
+        if (i >= o.length) return {
+          done: true
+        };
+        return {
+          done: false,
+          value: o[i++]
+        };
+      };
+    }
+
+    throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+  }
+
+  it = o[Symbol.iterator]();
+  return it.next.bind(it);
+}
+
 function parsePrimitive(value, type) {
   switch (type) {
     case "number":
@@ -1210,7 +1340,7 @@ function parsePrimitive(value, type) {
       return value.toLowerCase() === "true" || value.length === 0;
   }
 
-  throw new Error("Unknown primitive type " + type + " with - " + value);
+  throw new TwoslashError("Unknown primitive value in compiler flag", "The only recognized primitives are number, string and boolean. Got " + type + " with " + value + ".", "This is likely a typo.");
 }
 function cleanMarkdownEscaped(code) {
   code = code.replace(/¨D/g, "$");
@@ -1218,27 +1348,18 @@ function cleanMarkdownEscaped(code) {
   return code;
 }
 function typesToExtension(types) {
-  switch (types) {
-    case "js":
-      return "js";
-
-    case "javascript":
-      return "js";
-
-    case "ts":
-      return "ts";
-
-    case "typescript":
-      return "ts";
-
-    case "tsx":
-      return "tsx";
-
-    case "jsn":
-      return "json";
-  }
-
-  throw new Error("Cannot handle the file extension:" + types);
+  var map = {
+    js: "js",
+    javascript: "js",
+    ts: "ts",
+    typescript: "ts",
+    tsx: "tsx",
+    jsx: "jsx",
+    json: "json",
+    jsn: "json"
+  };
+  if (map[types]) return map[types];
+  throw new TwoslashError("Unknown TypeScript extension given to Twoslash", "Received " + types + " but Twoslash only accepts: " + Object.keys(map) + " ", "");
 }
 function getIdentifierTextSpans(ts, sourceFile) {
   var textSpans = [];
@@ -1258,10 +1379,6 @@ function getIdentifierTextSpans(ts, sourceFile) {
       checkChildren(child);
     });
   }
-}
-function stringAroundIndex(string, index) {
-  var arr = [string[index - 3], string[index - 2], string[index - 1], ">", string[index], "<", string[index + 1], string[index + 2], string[index + 3]];
-  return arr.filter(Boolean).join("");
 }
 /** Came from https://ourcodeworld.com/articles/read/223/how-to-retrieve-the-closest-word-in-a-string-with-a-given-index-in-javascript */
 
@@ -1288,36 +1405,65 @@ function getClosestWord(str, pos) {
 }
 
 /** To ensure that errors are matched up right */
-function validateCodeForErrors(relevantErrors, handbookOptions, extension, originalCode) {
+
+function validateCodeForErrors(relevantErrors, handbookOptions, extension, originalCode, vfsRoot) {
   var inErrsButNotFoundInTheHeader = relevantErrors.filter(function (e) {
     return !handbookOptions.errors.includes(e.code);
   });
-  var errorsFound = inErrsButNotFoundInTheHeader.map(function (e) {
+  var errorsFound = Array.from(new Set(inErrsButNotFoundInTheHeader.map(function (e) {
     return e.code;
-  }).join(' ');
+  }))).join(" ");
 
   if (inErrsButNotFoundInTheHeader.length) {
-    var codeToAdd = "// @errors: " + relevantErrors.map(function (e) {
+    var errorsToShow = new Set(relevantErrors.map(function (e) {
       return e.code;
-    }).join(' ');
-    var postfix = handbookOptions.errors.length ? " - the annotation specified " + handbookOptions.errors : '\n\nExpected:\n' + codeToAdd;
-    var afterMessage = inErrsButNotFoundInTheHeader.map(function (e) {
-      var msg = typeof e.messageText === 'string' ? e.messageText : e.messageText.messageText;
-      return "[" + e.code + "] - " + msg;
-    }).join('\n  ');
-    var codeOutput = "\n\n## Code\n\n'''" + extension + "\n" + originalCode + "\n'''";
-    throw new Error("Errors were thrown in the sample, but not included in an errors tag: " + errorsFound + postfix + "\n\n  " + afterMessage + codeOutput);
+    }));
+    var codeToAdd = "// @errors: " + Array.from(errorsToShow).join(" ");
+    var missing = handbookOptions.errors.length ? "\nThe existing annotation specified " + handbookOptions.errors.join(" ") : "\nExpected: " + codeToAdd; // These get filled by below
+
+    var filesToErrors = {};
+    var noFiles = [];
+    inErrsButNotFoundInTheHeader.forEach(function (d) {
+      var _d$file;
+
+      var fileRef = ((_d$file = d.file) == null ? void 0 : _d$file.fileName) && d.file.fileName.replace(vfsRoot, "");
+      if (!fileRef) noFiles.push(d);else {
+        var existing = filesToErrors[fileRef];
+        if (existing) existing.push(d);else filesToErrors[fileRef] = [d];
+      }
+    });
+
+    var showDiagnostics = function showDiagnostics(title, diags) {
+      return title + "\n  " + diags.map(function (e) {
+        var msg = typeof e.messageText === "string" ? e.messageText : e.messageText.messageText;
+        return "[" + e.code + "] " + e.start + " - " + msg;
+      }).join("\n  ");
+    };
+
+    var innerDiags = [];
+
+    if (noFiles.length) {
+      innerDiags.push(showDiagnostics("Ambient Errors", noFiles));
+    }
+
+    Object.keys(filesToErrors).forEach(function (filepath) {
+      innerDiags.push(showDiagnostics(filepath, filesToErrors[filepath]));
+    });
+    var allMessages = innerDiags.join("\n\n");
+    var newErr = new TwoslashError("Errors were thrown in the sample, but not included in an errors tag", "These errors were not marked as being expected: " + errorsFound + ". " + missing, "Compiler Errors:\n\n" + allMessages);
+    newErr.code = "## Code\n\n'''" + extension + "\n" + originalCode + "\n'''";
+    throw newErr;
   }
 }
 /** Mainly to warn myself, I've lost a good few minutes to this before */
 
 function validateInput(code) {
-  if (code.includes('// @errors ')) {
-    throw new Error("You have '@errors ' - you're missing the colon after errors");
+  if (code.includes("// @errors ")) {
+    throw new TwoslashError("You have '// @errors ' (with a space)", "You want '// @errors: ' (with a colon)", "This is a pretty common typo");
   }
 
-  if (code.includes('// @filename ')) {
-    throw new Error("You have '@filename ' - you're missing the colon after filename");
+  if (code.includes("// @filename ")) {
+    throw new TwoslashError("You have '// @filename ' (with a space)", "You want '// @filename: ' (with a colon)", "This is a pretty common typo");
   }
 }
 
@@ -1328,12 +1474,40 @@ try {
 } catch (error) {}
 
 var hasProcess = typeof process !== "undefined";
-var shouldDebug = hasLocalStorage &&
-/*#__PURE__*/
-localStorage.getItem("DEBUG") || hasProcess && process.env.DEBUG;
+var shouldDebug = hasLocalStorage && /*#__PURE__*/localStorage.getItem("DEBUG") || hasProcess && process.env.DEBUG;
 var log = shouldDebug ? console.log : function (_message) {
   return "";
 };
+var TwoslashError = /*#__PURE__*/function (_Error) {
+  _inheritsLoose(TwoslashError, _Error);
+
+  function TwoslashError(title, description, recommendation, code) {
+    var _this;
+
+    var message = "\n## " + title + "\n\n" + description + "\n";
+
+    if (recommendation) {
+      message += "\n" + recommendation;
+    }
+
+    if (code) {
+      message += "\n" + code;
+    }
+
+    _this = _Error.call(this, message) || this;
+    _this.title = void 0;
+    _this.description = void 0;
+    _this.recommendation = void 0;
+    _this.code = void 0;
+    _this.title = title;
+    _this.description = description;
+    _this.recommendation = recommendation;
+    _this.code = code;
+    return _this;
+  }
+
+  return TwoslashError;
+}( /*#__PURE__*/_wrapNativeSuper(Error));
 
 function filterHighlightLines(codeLines) {
   var highlights = [];
@@ -1381,14 +1555,14 @@ function filterHighlightLines(codeLines) {
         var _start = line.indexOf("^");
 
         var length = line.lastIndexOf("^") - _start + 1;
-        var position = contentOffset + _start;
         var description = highlightMatch[1] ? highlightMatch[1].trim() : "";
         highlights.push({
           kind: "highlight",
-          position: position,
+          offset: _start + contentOffset,
           length: length,
-          description: description,
-          line: _i
+          text: description,
+          line: _i + removedLines - 1,
+          start: _start
         });
         stripLine("having a highlight");
       } else if (removePrettierIgnoreMatch !== null) {
@@ -1429,7 +1603,7 @@ function getOptionValueFromMap(name, key, optMap) {
 
   if (result === undefined) {
     var keys = Array.from(optMap.keys());
-    throw new Error("Invalid value " + key + " for " + name + ". Allowed values: " + keys.join(","));
+    throw new TwoslashError("Invalid inline compiler value", "Got " + key + " for " + name + " but it is not a supported value by the TS compiler.", "Allowed values: " + keys.join(","));
   }
 
   return result;
@@ -1439,16 +1613,7 @@ function setOption(name, value, opts, ts) {
   log("Setting " + name + " to " + value);
 
   var _loop2 = function _loop2() {
-    if (_isArray) {
-      if (_i2 >= _iterator.length) return "break";
-      _ref = _iterator[_i2++];
-    } else {
-      _i2 = _iterator.next();
-      if (_i2.done) return "break";
-      _ref = _i2.value;
-    }
-
-    var opt = _ref;
+    var opt = _step.value;
 
     if (opt.name.toLowerCase() === name.toLowerCase()) {
       switch (opt.type) {
@@ -1487,16 +1652,13 @@ function setOption(name, value, opts, ts) {
     }
   };
 
-  for (var _iterator = ts.optionDeclarations, _isArray = Array.isArray(_iterator), _i2 = 0, _iterator = _isArray ? _iterator : _iterator[Symbol.iterator]();;) {
-    var _ref;
-
+  for (var _iterator = _createForOfIteratorHelperLoose(ts.optionDeclarations), _step; !(_step = _iterator()).done;) {
     var _ret = _loop2();
 
-    if (_ret === "break") break;
     if (typeof _ret === "object") return _ret.v;
   }
 
-  throw new Error("No compiler setting named '" + name + "' exists!");
+  throw new TwoslashError("Invalid inline compiler flag", "There isn't a TypeScript compiler flag called '" + name + "'.", "This is likely a typo, you can check all the compiler flags in the TSConfig reference, or check the additional Twoslash flags in the npm page for @typescript/twoslash.");
 }
 
 var booleanConfigRegexp = /^\/\/\s?@(\w+)$/; // https://regex101.com/r/8B2Wwh/1
@@ -1506,29 +1668,52 @@ var valuedConfigRegexp = /^\/\/\s?@(\w+):\s?(.+)$/;
 function filterCompilerOptions(codeLines, defaultCompilerOptions, ts) {
   var options = _extends({}, defaultCompilerOptions);
 
-  for (var _i3 = 0; _i3 < codeLines.length;) {
+  for (var _i2 = 0; _i2 < codeLines.length;) {
     var match = void 0;
 
-    if (match = booleanConfigRegexp.exec(codeLines[_i3])) {
+    if (match = booleanConfigRegexp.exec(codeLines[_i2])) {
       options[match[1]] = true;
       setOption(match[1], "true", options, ts);
-    } else if (match = valuedConfigRegexp.exec(codeLines[_i3])) {
+    } else if (match = valuedConfigRegexp.exec(codeLines[_i2])) {
       // Skip a filename tag, which should propagate through this stage
       if (match[1] === "filename") {
-        _i3++;
+        _i2++;
         continue;
       }
 
       setOption(match[1], match[2], options, ts);
     } else {
-      _i3++;
+      _i2++;
       continue;
     }
 
-    codeLines.splice(_i3, 1);
+    codeLines.splice(_i2, 1);
   }
 
   return options;
+}
+
+function filterCustomTags(codeLines, customTags) {
+  var tags = [];
+
+  for (var _i3 = 0; _i3 < codeLines.length;) {
+    var match = void 0;
+
+    if (match = valuedConfigRegexp.exec(codeLines[_i3])) {
+      if (customTags.includes(match[1])) {
+        tags.push({
+          name: match[1],
+          line: _i3,
+          annotation: codeLines[_i3].split("@" + match[1] + ": ")[1]
+        });
+        codeLines.splice(_i3, 1);
+      }
+    }
+
+    _i3++;
+  }
+
+  return tags;
 } // Keys in this object are used to filter out handbook options
 // before compiler options are set.
 
@@ -1605,9 +1790,10 @@ function twoslasher(code, extension, options) {
   }, (_options$defaultCompi = options.defaultCompilerOptions) != null ? _options$defaultCompi : {});
 
   validateInput(code);
-  code = cleanMarkdownEscaped(code); // This is mutated as the below functions pull out info
+  code = cleanMarkdownEscaped(code); // NOTE: codeLines is mutated by the below functions:
 
   var codeLines = code.split(/\r\n?|\n/g);
+  var tags = options.customTags ? filterCustomTags(codeLines, options.customTags) : [];
 
   var handbookOptions = _extends({}, filterHandbookOptions(codeLines), options.defaultOptions);
 
@@ -1618,6 +1804,8 @@ function twoslasher(code, extension, options) {
   }
 
   var getRoot = function getRoot() {
+    var pa = "pa";
+
     var path = __webpack_require__(622);
 
     var rootPath = options.vfsRoot || process.cwd();
@@ -1644,18 +1832,7 @@ function twoslasher(code, extension, options) {
   });
 
   var _loop3 = function _loop3() {
-    var _highlights, _partialQueries;
-
-    if (_isArray2) {
-      if (_i5 >= _iterator2.length) return "break";
-      _ref2 = _iterator2[_i5++];
-    } else {
-      _i5 = _iterator2.next();
-      if (_i5.done) return "break";
-      _ref2 = _i5.value;
-    }
-
-    var file = _ref2;
+    var file = _step2.value;
     var filename = file[0],
         codeLines = file[1];
     var filetype = filename.split(".").pop() || ""; // Only run the LSP-y things on source files
@@ -1670,9 +1847,7 @@ function twoslasher(code, extension, options) {
     var newFileCode = codeLines.join("\n");
     env.createFile(filename, newFileCode);
     var updates = filterHighlightLines(codeLines);
-
-    (_highlights = highlights).push.apply(_highlights, updates.highlights); // ------ Do the LSP lookup for the queries
-
+    highlights = highlights.concat(updates.highlights); // ------ Do the LSP lookup for the queries
 
     var lspedQueries = updates.queries.map(function (q, i) {
       var sourceFile = env.getSourceFile(filename);
@@ -1681,19 +1856,20 @@ function twoslasher(code, extension, options) {
       switch (q.kind) {
         case "query":
           {
-            var quickInfo = ls.getQuickInfoAtPosition(filename, position);
-            var token = ls.getDefinitionAtPosition(filename, position); // prettier-ignore
+            var quickInfo = ls.getQuickInfoAtPosition(filename, position); // prettier-ignore
 
-            var text = "Could not get LSP result: " + stringAroundIndex(env.getSourceFile(filename).text, position);
-            var docs = undefined;
+            var text;
+            var docs;
 
-            if (quickInfo && token && quickInfo.displayParts) {
+            if (quickInfo && quickInfo.displayParts) {
               text = quickInfo.displayParts.map(function (dp) {
                 return dp.text;
               }).join("");
               docs = quickInfo.documentation ? quickInfo.documentation.map(function (d) {
                 return d.text;
               }).join("<br/>") : undefined;
+            } else {
+              throw new TwoslashError("Invalid QuickInfo query", "The request on line " + q.line + " in " + filename + " for quickinfo via ^? returned no from the compiler.", "This is likely that the x positioning is off.");
             }
 
             var queryResult = {
@@ -1709,10 +1885,10 @@ function twoslasher(code, extension, options) {
 
         case "completion":
           {
-            var _quickInfo = ls.getCompletionsAtPosition(filename, position - 1, {});
+            var completions = ls.getCompletionsAtPosition(filename, position - 1, {});
 
-            if (!_quickInfo && !handbookOptions.noErrorValidation) {
-              throw new Error("Twoslash: The ^| query at line " + q.line + " in " + filename + " did not return any completions");
+            if (!completions && !handbookOptions.noErrorValidation) {
+              throw new TwoslashError("Invalid completion query", "The request on line " + q.line + " in " + filename + " for completions via ^| returned no completions from the compiler.", "This is likely that the positioning is off.");
             }
 
             var word = getClosestWord(sourceFile.text, position - 1);
@@ -1720,7 +1896,7 @@ function twoslasher(code, extension, options) {
             var lastDot = prefix.split(".").pop() || "";
             var _queryResult = {
               kind: "completions",
-              completions: (_quickInfo == null ? void 0 : _quickInfo.entries) || [],
+              completions: (completions == null ? void 0 : completions.entries) || [],
               completionPrefix: lastDot,
               line: q.line - i,
               offset: q.offset,
@@ -1730,20 +1906,15 @@ function twoslasher(code, extension, options) {
           }
       }
     });
-
-    (_partialQueries = partialQueries).push.apply(_partialQueries, lspedQueries); // Sets the file in the compiler as being without the comments
-
+    partialQueries = partialQueries.concat(lspedQueries); // Sets the file in the compiler as being without the comments
 
     var newEditedFileCode = codeLines.join("\n");
     env.updateFile(filename, newEditedFileCode);
   };
 
-  for (var _iterator2 = nameContent, _isArray2 = Array.isArray(_iterator2), _i5 = 0, _iterator2 = _isArray2 ? _iterator2 : _iterator2[Symbol.iterator]();;) {
-    var _ref2;
-
+  for (var _iterator2 = _createForOfIteratorHelperLoose(nameContent), _step2; !(_step2 = _iterator2()).done;) {
     var _ret2 = _loop3();
 
-    if (_ret2 === "break") break;
     if (_ret2 === "continue") continue;
   } // We need to also strip the highlights + queries from the main file which is shown to people
 
@@ -1777,13 +1948,16 @@ function twoslasher(code, extension, options) {
     }
 
     if (!handbookOptions.noErrors) {
-      errs.push.apply(errs, ls.getSemanticDiagnostics(file));
-      errs.push.apply(errs, ls.getSyntacticDiagnostics(file));
+      errs = errs.concat(ls.getSemanticDiagnostics(file), ls.getSyntacticDiagnostics(file));
     }
 
     var source = env.sys.readFile(file);
     var sourceFile = env.getSourceFile(file);
-    if (!sourceFile) throw new Error("No sourcefile found for " + file + " in twoslash"); // Get all of the interesting quick info popover
+
+    if (!sourceFile) {
+      throw new TwoslashError("Could not find a  TypeScript sourcefile for '" + file + "' in the Twoslash vfs", "It's a little hard to provide useful advice on this error. Maybe you imported something which the compiler doesn't think is a source file?", "");
+    } // Get all of the interesting quick info popover
+
 
     if (!handbookOptions.showEmit) {
       var fileContentStartIndexInModifiedFile = code.indexOf(source) == -1 ? 0 : code.indexOf(source);
@@ -1791,19 +1965,8 @@ function twoslasher(code, extension, options) {
 
       var identifiers = handbookOptions.noStaticSemanticInfo ? [] : getIdentifierTextSpans(ts, sourceFile);
 
-      for (var _iterator3 = identifiers, _isArray3 = Array.isArray(_iterator3), _i6 = 0, _iterator3 = _isArray3 ? _iterator3 : _iterator3[Symbol.iterator]();;) {
-        var _ref3;
-
-        if (_isArray3) {
-          if (_i6 >= _iterator3.length) break;
-          _ref3 = _iterator3[_i6++];
-        } else {
-          _i6 = _iterator3.next();
-          if (_i6.done) break;
-          _ref3 = _i6.value;
-        }
-
-        var identifier = _ref3;
+      for (var _iterator3 = _createForOfIteratorHelperLoose(identifiers), _step3; !(_step3 = _iterator3()).done;) {
+        var identifier = _step3.value;
         var span = identifier.span;
         var quickInfo = ls.getQuickInfoAtPosition(file, span.start);
 
@@ -1880,27 +2043,16 @@ function twoslasher(code, extension, options) {
   }); // A validator that error codes are mentioned, so we can know if something has broken in the future
 
   if (!handbookOptions.noErrorValidation && relevantErrors.length) {
-    validateCodeForErrors(relevantErrors, handbookOptions, extension, originalCode);
+    validateCodeForErrors(relevantErrors, handbookOptions, extension, originalCode, fsRoot);
   }
 
   var errors = []; // We can't pass the ts.DiagnosticResult out directly (it can't be JSON.stringified)
 
-  for (var _iterator4 = relevantErrors, _isArray4 = Array.isArray(_iterator4), _i7 = 0, _iterator4 = _isArray4 ? _iterator4 : _iterator4[Symbol.iterator]();;) {
-    var _ref4;
-
-    if (_isArray4) {
-      if (_i7 >= _iterator4.length) break;
-      _ref4 = _iterator4[_i7++];
-    } else {
-      _i7 = _iterator4.next();
-      if (_i7.done) break;
-      _ref4 = _i7.value;
-    }
-
-    var err = _ref4;
+  for (var _iterator4 = _createForOfIteratorHelperLoose(relevantErrors), _step4; !(_step4 = _iterator4()).done;) {
+    var err = _step4.value;
     var codeWhereErrorLives = env.sys.readFile(err.file.fileName);
     var fileContentStartIndexInModifiedFile = code.indexOf(codeWhereErrorLives);
-    var renderedMessage = escapeHtml(ts.flattenDiagnosticMessageText(err.messageText, "\n"));
+    var renderedMessage = ts.flattenDiagnosticMessageText(err.messageText, "\n");
     var id = "err-" + err.code + "-" + err.start + "-" + err.length;
 
     var _ts$getLineAndCharact2 = ts.getLineAndCharacterOfPosition(err.file, err.start),
@@ -1931,7 +2083,7 @@ function twoslasher(code, extension, options) {
     if (!emitSource && !compilerOptions.outFile) {
       var allFiles = filenames.join(", "); // prettier-ignore
 
-      throw new Error("Cannot find the corresponding **source** file for " + emitFilename + " (looking for: " + emitSourceFilename + " in the vfs) - in " + allFiles);
+      throw new TwoslashError("Could not find source file to show the emit for", "Cannot find the corresponding **source** file  " + emitFilename + " for completions via ^| returned no quickinfo from the compiler.", "Looked for: " + emitSourceFilename + " in the vfs - which contains: " + allFiles);
     } // Allow outfile, in which case you need any file.
 
 
@@ -1947,10 +2099,9 @@ function twoslasher(code, extension, options) {
     if (!file) {
       var _allFiles = output.outputFiles.map(function (o) {
         return o.name;
-      }).join(", "); // prettier-ignore
+      }).join(", ");
 
-
-      throw new Error("Cannot find the file " + handbookOptions.showEmittedFile + " (looking for: " + (fsRoot + handbookOptions.showEmittedFile) + " in the vfs) - in " + _allFiles);
+      throw new TwoslashError("Cannot find the output file in the Twoslash VFS", "Looking for " + handbookOptions.showEmittedFile + " in the Twoslash vfs after compiling", "Looked for\" " + (fsRoot + handbookOptions.showEmittedFile) + " in the vfs - which contains " + _allFiles + ".");
     }
 
     code = file.text;
@@ -1991,17 +2142,51 @@ function twoslasher(code, extension, options) {
       return e.start && e.start > -1;
     });
     highlights.forEach(function (highlight) {
-      highlight.position -= cutIndex;
+      highlight.start -= cutIndex;
       highlight.line -= lineOffset;
     });
     highlights = highlights.filter(function (e) {
-      return e.position > -1;
+      return e.start > -1;
     });
     queries.forEach(function (q) {
       return q.line -= lineOffset;
     });
     queries = queries.filter(function (q) {
       return q.line > -1;
+    });
+    tags.forEach(function (q) {
+      return q.line -= lineOffset;
+    });
+    tags = tags.filter(function (q) {
+      return q.line > -1;
+    });
+  }
+
+  var cutAfterString = "// ---cut-after---\n";
+
+  if (code.includes(cutAfterString)) {
+    // Get the place it is, then find the end and the start of the next line
+    var _cutIndex = code.indexOf(cutAfterString) + cutAfterString.length;
+
+    var _lineOffset = code.substr(0, _cutIndex).split("\n").length - 1; // Kills the code shown, removing any whitespace on the end
+
+
+    code = code.split(cutAfterString).shift().trimEnd(); // Cut any metadata after the cutAfterString
+
+    staticQuickInfos = staticQuickInfos.filter(function (s) {
+      return s.line < _lineOffset;
+    });
+    errors = errors.filter(function (e) {
+      return e.line && e.line < _lineOffset;
+    });
+    highlights = highlights.filter(function (e) {
+      return e.line < _lineOffset;
+    });
+    queries = queries.filter(function (q) {
+      return q.line < _lineOffset;
+    });
+    tags = tags.filter(function (q) {
+      return q.line < _lineOffset;
     });
   }
 
@@ -2012,7 +2197,8 @@ function twoslasher(code, extension, options) {
     queries: queries,
     staticQuickInfos: staticQuickInfos,
     errors: errors,
-    playgroundURL: playgroundURL
+    playgroundURL: playgroundURL,
+    tags: tags
   };
 }
 
@@ -2022,19 +2208,8 @@ var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defau
   var currentFileContent = [];
   var fileMap = [];
 
-  for (var _iterator5 = lines, _isArray5 = Array.isArray(_iterator5), _i8 = 0, _iterator5 = _isArray5 ? _iterator5 : _iterator5[Symbol.iterator]();;) {
-    var _ref5;
-
-    if (_isArray5) {
-      if (_i8 >= _iterator5.length) break;
-      _ref5 = _iterator5[_i8++];
-    } else {
-      _i8 = _iterator5.next();
-      if (_i8.done) break;
-      _ref5 = _i8.value;
-    }
-
-    var line = _ref5;
+  for (var _iterator5 = _createForOfIteratorHelperLoose(lines), _step5; !(_step5 = _iterator5()).done;) {
+    var line = _step5.value;
 
     if (line.includes("// @filename: ")) {
       fileMap.push([root + nameForFile, currentFileContent]);
@@ -2055,6 +2230,7 @@ var splitTwoslashCodeInfoFiles = function splitTwoslashCodeInfoFiles(code, defau
   return nameContent;
 };
 
+exports.TwoslashError = TwoslashError;
 exports.twoslasher = twoslasher;
 //# sourceMappingURL=twoslash.cjs.development.js.map
 
@@ -3453,7 +3629,7 @@ conversions["RegExp"] = function (V, opts) {
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
-Object.defineProperty(exports,"__esModule",{value:!0});var e=__webpack_require__(640);function t(){return(t=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var n in r)Object.prototype.hasOwnProperty.call(r,n)&&(e[n]=r[n])}return e}).apply(this,arguments)}function r(e,t){switch(t){case"number":return+e;case"string":return e;case"boolean":return"true"===e.toLowerCase()||0===e.length}throw new Error("Unknown primitive type "+t+" with - "+e)}var n=!1;try{n="undefined"!=typeof localStorage}catch(e){}var i="undefined"!=typeof process,o=n&&localStorage.getItem("DEBUG")||i&&process.env.DEBUG?console.log:function(e){return""};function s(e){for(var t=[],r=[],n=0,i=0,s=0,a=function(a){var c=e[a],f=function(){i=n,n+=c.length+1},u=function(t){o("Removing line "+a+" for "+t),s++,e.splice(a,1),a--};if(c.includes("//")){var p=/^\s*\/\/\s*\^+( .+)?$/.exec(c),d=/^\s*\/\/\s*\^\?\s*$/.exec(c),h=/^\s*\/\/ prettier-ignore$/.exec(c),g=/^\s*\/\/\s*\^\|$/.exec(c);if(null!==d){var v=c.indexOf("^");r.push({kind:"query",offset:v,text:void 0,docs:void 0,line:a+s-1}),u("having a query")}else if(null!==p){var m=c.indexOf("^"),x=c.lastIndexOf("^")-m+1,y=i+m,w=p[1]?p[1].trim():"";t.push({kind:"highlight",position:y,length:x,description:w,line:a}),u("having a highlight")}else if(null!==h)u("being a prettier ignore");else if(null!==g){var E=c.indexOf("^");r.push({kind:"completion",offset:E,text:void 0,docs:void 0,line:a+s-1}),u("having a completion query")}else f()}else f();l=a},l=0;l<e.length;l++)a(l);return{highlights:t,queries:r}}function a(e,t,r){var n=r.get(t.toLowerCase());if(o("Get "+e+" mapped option: "+t+" => "+n),void 0===n){var i=Array.from(r.keys());throw new Error("Invalid value "+t+" for "+e+". Allowed values: "+i.join(","))}return n}function l(e,t,n,i){o("Setting "+e+" to "+t);var s=function(){if(c){if(f>=l.length)return"break";u=l[f++]}else{if((f=l.next()).done)return"break";u=f.value}var i=u;if(i.name.toLowerCase()===e.toLowerCase()){switch(i.type){case"number":case"string":case"boolean":n[i.name]=r(t,i.type);break;case"list":var o=i.element.type,s=t.split(",");n[i.name]=s.map("string"==typeof o?function(e){return r(e,o)}:function(e){return a(i.name,e,o)});break;default:n[i.name]=a(i.name,t,i.type)}return{v:void 0}}},l=i.optionDeclarations,c=Array.isArray(l),f=0;for(l=c?l:l[Symbol.iterator]();;){var u,p=s();if("break"===p)break;if("object"==typeof p)return p.v}throw new Error("No compiler setting named '"+e+"' exists!")}var c=/^\/\/\s?@(\w+)$/,f=/^\/\/\s?@(\w+):\s?(.+)$/,u={errors:[],noErrors:!1,showEmit:!1,showEmittedFile:void 0,noStaticSemanticInfo:!1,emit:!1,noErrorValidation:!1};exports.twoslasher=function(r,n,i){var a,p,d;void 0===i&&(i={});var h=null!=(a=i.tsModule)?a:__webpack_require__(34),g=null!=(p=i.lzstringModule)?p:__webpack_require__(637),v=r,m=function(e){switch(e){case"js":case"javascript":return"js";case"ts":case"typescript":return"ts";case"tsx":return"tsx";case"jsn":return"json"}throw new Error("Cannot handle the file extension:"+e)}(n),x="index."+m;o("\n\nLooking at code: \n```"+m+"\n"+r+"\n```\n");var y=t({strict:!0,target:h.ScriptTarget.ES2016,allowJs:!0},null!=(d=i.defaultCompilerOptions)?d:{});!function(e){if(e.includes("// @errors "))throw new Error("You have '@errors ' - you're missing the colon after errors");if(e.includes("// @filename "))throw new Error("You have '@filename ' - you're missing the colon after filename")}(r);var w=(r=function(e){return(e=e.replace(/¨D/g,"$")).replace(/¨T/g,"~")}(r)).split(/\r\n?|\n/g),E=t({},function(e){for(var r=t({},u),n=0;n<e.length;n++){var i=void 0;(i=c.exec(e[n]))?i[1]in r&&(r[i[1]]=!0,o("Setting options."+i[1]+" to true"),e.splice(n,1),n--):(i=f.exec(e[n]))&&i[1]in r&&(r[i[1]]=i[2],o("Setting options."+i[1]+" to "+i[2]),e.splice(n,1),n--)}return"errors"in r&&"string"==typeof r.errors&&(r.errors=r.errors.split(" ").map(Number),o("Setting options.error to ",r.errors)),r}(w),i.defaultOptions),b=function(e,r,n){for(var i=t({},r),o=0;o<e.length;){var s=void 0;if(s=c.exec(e[o]))i[s[1]]=!0,l(s[1],"true",i,n);else{if(!(s=f.exec(e[o]))){o++;continue}if("filename"===s[1]){o++;continue}l(s[1],s[2],i,n)}e.splice(o,1)}return i}(w,y,h);E.showEmittedFile||(E.showEmittedFile=b.jsx&&b.jsx===h.JsxEmit.Preserve?"index.jsx":"index.js");var S=function(){var e=__webpack_require__(622);return(i.vfsRoot||process.cwd()).split(e.sep).join(e.posix.sep)},k=!!i.fsMap,j=k&&i.fsMap?i.fsMap:new Map,F=k?e.createSystem(j):e.createFSBackedSystem(j,S(),h),P=k?"/":S()+"/",A=e.createVirtualTypeScriptEnvironment(F,[],h,b,i.customTransformers),O=A.languageService;r=w.join("\n");var C=[],T=[],q=[],L=function(e,t,r){var n=e.split(/\r\n?|\n/g),i=e.includes("@filename: "+t)?"global.ts":t,o=[],s=[],a=n,l=Array.isArray(a),c=0;for(a=l?a:a[Symbol.iterator]();;){var f;if(l){if(c>=a.length)break;f=a[c++]}else{if((c=a.next()).done)break;f=c.value}var u=f;u.includes("// @filename: ")?(s.push([r+i,o]),i=u.split("// @filename: ")[1].trim(),o=[]):o.push(u)}return s.push([r+i,o]),s.filter((function(e){return e[1].length>0&&(e[1].length>1||""!==e[1][0])}))}(r,x,P),I=["js","jsx","ts","tsx"],M=L.map((function(e){return e[0]})),D=function(){var e,t;if(N){if(U>=$.length)return"break";B=$[U++]}else{if((U=$.next()).done)return"break";B=U.value}var r=B[0],n=B[1],i=r.split(".").pop()||"",o=b.resolveJsonModule&&"json"===i;if(!I.includes(i)&&!o)return"continue";var a=n.join("\n");A.createFile(r,a);var l=s(n);(e=q).push.apply(e,l.highlights);var c=l.queries.map((function(e,t){var n,i,o=A.getSourceFile(r),s=h.getPositionOfLineAndCharacter(o,e.line,e.offset);switch(e.kind){case"query":var a=O.getQuickInfoAtPosition(r,s),l=O.getDefinitionAtPosition(r,s),c="Could not get LSP result: "+[(n=A.getSourceFile(r).text)[(i=s)-3],n[i-2],n[i-1],">",n[i],"<",n[i+1],n[i+2],n[i+3]].filter(Boolean).join(""),f=void 0;return a&&l&&a.displayParts&&(c=a.displayParts.map((function(e){return e.text})).join(""),f=a.documentation?a.documentation.map((function(e){return e.text})).join("<br/>"):void 0),{kind:"query",text:c,docs:f,line:e.line-t,offset:e.offset,file:r};case"completion":var u=O.getCompletionsAtPosition(r,s-1,{});if(!u&&!E.noErrorValidation)throw new Error("Twoslash: The ^| query at line "+e.line+" in "+r+" did not return any completions");var p=function(e,t){e=String(e),t=Number(t)>>>0;var r=e.slice(0,t+1).search(/\S+$/),n=e.slice(t).search(/\s/);return n<0?{word:e.slice(r),startPos:r}:{word:e.slice(r,n+t),startPos:r}}(o.text,s-1),d=o.text.slice(p.startPos,s).split(".").pop()||"";return{kind:"completions",completions:(null==u?void 0:u.entries)||[],completionPrefix:d,line:e.line-t,offset:e.offset,file:r}}}));(t=C).push.apply(t,c);var f=n.join("\n");A.updateFile(r,f)},$=L,N=Array.isArray($),U=0;for($=N?$:$[Symbol.iterator]();;){var B;if("break"===D())break}var R=r.split(/\r\n?|\n/g);s(R),r=R.join("\n"),E.emit&&M.forEach((function(e){var t=e.split(".").pop()||"";I.includes(t)&&O.getEmitOutput(e).outputFiles.forEach((function(e){F.writeFile(e.name,e.text)}))}));var V=[],G=[];M.forEach((function(e){var t=e.split(".").pop()||"";if(I.includes(t)){E.noErrors||(V.push.apply(V,O.getSemanticDiagnostics(e)),V.push.apply(V,O.getSyntacticDiagnostics(e)));var n=A.sys.readFile(e),i=A.getSourceFile(e);if(!i)throw new Error("No sourcefile found for "+e+" in twoslash");if(!E.showEmit){var o=-1==r.indexOf(n)?0:r.indexOf(n),s=r.slice(0,o).split("\n").length-1,a=E.noStaticSemanticInfo?[]:function(e,t){var r=[];return function n(i){e.forEachChild(i,(function(i){if(e.isIdentifier(i)){var o=i.getStart(t,!1);r.push({span:e.createTextSpan(o,i.end-o),text:i.getText(t)})}n(i)}))}(t),r}(h,i),l=Array.isArray(a),c=0;for(a=l?a:a[Symbol.iterator]();;){var f;if(l){if(c>=a.length)break;f=a[c++]}else{if((c=a.next()).done)break;f=c.value}var u=f,p=u.span,d=O.getQuickInfoAtPosition(e,p.start);if(d&&d.displayParts){var g=d.displayParts.map((function(e){return e.text})).join(""),v=u.text,m=d.documentation?d.documentation.map((function(e){return e.text})).join("\n"):void 0,x=p.start+o,y=h.createSourceFile("_.ts",r,h.ScriptTarget.ES2015),w=h.getLineAndCharacterOfPosition(y,x);G.push({text:g,docs:m,start:x,length:p.length,line:w.line,character:w.character,targetString:v})}}C.filter((function(t){return t.file===e})).forEach((function(e){var t=h.getPositionOfLineAndCharacter(i,e.line,e.offset)+o;switch(e.kind){case"query":T.push({docs:e.docs,kind:"query",start:t+o,length:e.text.length,text:e.text,offset:e.offset,line:e.line+s+1});break;case"completions":T.push({completions:e.completions,kind:"completions",start:t+o,completionsPrefix:e.completionPrefix,length:1,offset:e.offset,line:e.line+s+1})}}))}}}));var J=V.filter((function(e){return e.file&&M.includes(e.file.fileName)}));!E.noErrorValidation&&J.length&&function(e,t,r,n){var i=e.filter((function(e){return!t.errors.includes(e.code)})),o=i.map((function(e){return e.code})).join(" ");if(i.length){var s="// @errors: "+e.map((function(e){return e.code})).join(" "),a=t.errors.length?" - the annotation specified "+t.errors:"\n\nExpected:\n"+s,l=i.map((function(e){return"["+e.code+"] - "+("string"==typeof e.messageText?e.messageText:e.messageText.messageText)})).join("\n  ");throw new Error("Errors were thrown in the sample, but not included in an errors tag: "+o+a+"\n\n  "+l+"\n\n## Code\n\n'''"+r+"\n"+n+"\n'''")}}(J,E,n,v);var Q=[],_=J,z=Array.isArray(_),Y=0;for(_=z?_:_[Symbol.iterator]();;){var H;if(z){if(Y>=_.length)break;H=_[Y++]}else{if((Y=_.next()).done)break;H=Y.value}var K=H,W=A.sys.readFile(K.file.fileName),X=r.indexOf(W),Z=h.flattenDiagnosticMessageText(K.messageText,"\n").replace(/</g,"&lt;"),ee="err-"+K.code+"-"+K.start+"-"+K.length,te=h.getLineAndCharacterOfPosition(K.file,K.start);Q.push({category:K.category,code:K.code,length:K.length,start:K.start?K.start+X:void 0,line:te.line,character:te.character,renderedMessage:Z,id:ee})}if(E.showEmit){var re=E.showEmittedFile||x,ne=P+re.replace(".jsx","").replace(".js","").replace(".d.ts","").replace(".map",""),ie=M.find((function(e){return e===ne+".ts"||e===ne+".tsx"}));if(!ie&&!b.outFile){var oe=M.join(", ");throw new Error("Cannot find the corresponding **source** file for "+re+" (looking for: "+ne+" in the vfs) - in "+oe)}b.outFile&&(ie=M[0]);var se=O.getEmitOutput(ie),ae=se.outputFiles.find((function(e){return e.name===P+E.showEmittedFile||e.name===E.showEmittedFile}));if(!ae){var le=se.outputFiles.map((function(e){return e.name})).join(", ");throw new Error("Cannot find the file "+E.showEmittedFile+" (looking for: "+(P+E.showEmittedFile)+" in the vfs) - in "+le)}r=ae.text,n=ae.name.split(".").pop(),q=[],C=[],G=[]}var ce="https://www.typescriptlang.org/play/#code/"+g.compressToEncodedURIComponent(v),fe="// ---cut---\n";if(r.includes(fe)){var ue=r.indexOf(fe)+fe.length,pe=r.substr(0,ue).split("\n").length-1;r=r.split(fe).pop(),G.forEach((function(e){e.start-=ue,e.line-=pe})),G=G.filter((function(e){return e.start>-1})),Q.forEach((function(e){e.start&&(e.start-=ue),e.line&&(e.line-=pe)})),Q=Q.filter((function(e){return e.start&&e.start>-1})),q.forEach((function(e){e.position-=ue,e.line-=pe})),q=q.filter((function(e){return e.position>-1})),T.forEach((function(e){return e.line-=pe})),T=T.filter((function(e){return e.line>-1}))}return{code:r,extension:n,highlights:q,queries:T,staticQuickInfos:G,errors:Q,playgroundURL:ce}};
+Object.defineProperty(exports,"__esModule",{value:!0});var e=__webpack_require__(640);function t(){return(t=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var n=arguments[t];for(var r in n)Object.prototype.hasOwnProperty.call(n,r)&&(e[r]=n[r])}return e}).apply(this,arguments)}function n(e){return(n=Object.setPrototypeOf?Object.getPrototypeOf:function(e){return e.__proto__||Object.getPrototypeOf(e)})(e)}function r(e,t){return(r=Object.setPrototypeOf||function(e,t){return e.__proto__=t,e})(e,t)}function i(e,t,n){return(i=function(){if("undefined"==typeof Reflect||!Reflect.construct)return!1;if(Reflect.construct.sham)return!1;if("function"==typeof Proxy)return!0;try{return Boolean.prototype.valueOf.call(Reflect.construct(Boolean,[],(function(){}))),!0}catch(e){return!1}}()?Reflect.construct:function(e,t,n){var i=[null];i.push.apply(i,t);var o=new(Function.bind.apply(e,i));return n&&r(o,n.prototype),o}).apply(null,arguments)}function o(e){var t="function"==typeof Map?new Map:void 0;return(o=function(e){if(null===e||-1===Function.toString.call(e).indexOf("[native code]"))return e;if("function"!=typeof e)throw new TypeError("Super expression must either be null or a function");if(void 0!==t){if(t.has(e))return t.get(e);t.set(e,o)}function o(){return i(e,arguments,n(this).constructor)}return o.prototype=Object.create(e.prototype,{constructor:{value:o,enumerable:!1,writable:!0,configurable:!0}}),r(o,e)})(e)}function s(e,t){(null==t||t>e.length)&&(t=e.length);for(var n=0,r=new Array(t);n<t;n++)r[n]=e[n];return r}function a(e,t){var n;if("undefined"==typeof Symbol||null==e[Symbol.iterator]){if(Array.isArray(e)||(n=function(e,t){if(e){if("string"==typeof e)return s(e,void 0);var n=Object.prototype.toString.call(e).slice(8,-1);return"Object"===n&&e.constructor&&(n=e.constructor.name),"Map"===n||"Set"===n?Array.from(e):"Arguments"===n||/^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)?s(e,void 0):void 0}}(e))||t&&e&&"number"==typeof e.length){n&&(e=n);var r=0;return function(){return r>=e.length?{done:!0}:{done:!1,value:e[r++]}}}throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.")}return(n=e[Symbol.iterator]()).next.bind(n)}function l(e,t){switch(t){case"number":return+e;case"string":return e;case"boolean":return"true"===e.toLowerCase()||0===e.length}throw new p("Unknown primitive value in compiler flag","The only recognized primitives are number, string and boolean. Got "+t+" with "+e+".","This is likely a typo.")}var c=!1;try{c="undefined"!=typeof localStorage}catch(e){}var u="undefined"!=typeof process,f=c&&localStorage.getItem("DEBUG")||u&&process.env.DEBUG?console.log:function(e){return""},p=function(e){var t,n;function i(t,n,r,i){var o,s="\n## "+t+"\n\n"+n+"\n";return r&&(s+="\n"+r),i&&(s+="\n"+i),(o=e.call(this,s)||this).title=void 0,o.description=void 0,o.recommendation=void 0,o.code=void 0,o.title=t,o.description=n,o.recommendation=r,o.code=i,o}return n=e,(t=i).prototype=Object.create(n.prototype),t.prototype.constructor=t,r(t,n),i}(o(Error));function h(e){for(var t=[],n=[],r=0,i=0,o=0,s=function(s){var l=e[s],c=function(){i=r,r+=l.length+1},u=function(t){f("Removing line "+s+" for "+t),o++,e.splice(s,1),s--};if(l.includes("//")){var p=/^\s*\/\/\s*\^+( .+)?$/.exec(l),h=/^\s*\/\/\s*\^\?\s*$/.exec(l),d=/^\s*\/\/ prettier-ignore$/.exec(l),v=/^\s*\/\/\s*\^\|$/.exec(l);if(null!==h){var m=l.indexOf("^");n.push({kind:"query",offset:m,text:void 0,docs:void 0,line:s+o-1}),u("having a query")}else if(null!==p){var g=l.indexOf("^"),y=l.lastIndexOf("^")-g+1,w=p[1]?p[1].trim():"";t.push({kind:"highlight",offset:g+i,length:y,text:w,line:s+o-1,start:g}),u("having a highlight")}else if(null!==d)u("being a prettier ignore");else if(null!==v){var x=l.indexOf("^");n.push({kind:"completion",offset:x,text:void 0,docs:void 0,line:s+o-1}),u("having a completion query")}else c()}else c();a=s},a=0;a<e.length;a++)s(a);return{highlights:t,queries:n}}function d(e,t,n){var r=n.get(t.toLowerCase());if(f("Get "+e+" mapped option: "+t+" => "+r),void 0===r){var i=Array.from(n.keys());throw new p("Invalid inline compiler value","Got "+t+" for "+e+" but it is not a supported value by the TS compiler.","Allowed values: "+i.join(","))}return r}function v(e,t,n,r){f("Setting "+e+" to "+t);for(var i,o=function(){var r=i.value;if(r.name.toLowerCase()===e.toLowerCase()){switch(r.type){case"number":case"string":case"boolean":n[r.name]=l(t,r.type);break;case"list":var o=r.element.type,s=t.split(",");n[r.name]=s.map("string"==typeof o?function(e){return l(e,o)}:function(e){return d(r.name,e,o)});break;default:n[r.name]=d(r.name,t,r.type)}return{v:void 0}}},s=a(r.optionDeclarations);!(i=s()).done;){var c=o();if("object"==typeof c)return c.v}throw new p("Invalid inline compiler flag","There isn't a TypeScript compiler flag called '"+e+"'.","This is likely a typo, you can check all the compiler flags in the TSConfig reference, or check the additional Twoslash flags in the npm page for @typescript/twoslash.")}var m=/^\/\/\s?@(\w+)$/,g=/^\/\/\s?@(\w+):\s?(.+)$/,y={errors:[],noErrors:!1,showEmit:!1,showEmittedFile:void 0,noStaticSemanticInfo:!1,emit:!1,noErrorValidation:!1};exports.TwoslashError=p,exports.twoslasher=function(n,r,i){var o,s,l;void 0===i&&(i={});var c=null!=(o=i.tsModule)?o:__webpack_require__(34),u=null!=(s=i.lzstringModule)?s:__webpack_require__(637),d=n,w=function(e){var t={js:"js",javascript:"js",ts:"ts",typescript:"ts",tsx:"tsx",jsx:"jsx",json:"json",jsn:"json"};if(t[e])return t[e];throw new p("Unknown TypeScript extension given to Twoslash","Received "+e+" but Twoslash only accepts: "+Object.keys(t)+" ","")}(r),x="index."+w;f("\n\nLooking at code: \n```"+w+"\n"+n+"\n```\n");var b=t({strict:!0,target:c.ScriptTarget.ES2016,allowJs:!0},null!=(l=i.defaultCompilerOptions)?l:{});!function(e){if(e.includes("// @errors "))throw new p("You have '// @errors ' (with a space)","You want '// @errors: ' (with a colon)","This is a pretty common typo");if(e.includes("// @filename "))throw new p("You have '// @filename ' (with a space)","You want '// @filename: ' (with a colon)","This is a pretty common typo")}(n);var j=(n=function(e){return(e=e.replace(/¨D/g,"$")).replace(/¨T/g,"~")}(n)).split(/\r\n?|\n/g),E=i.customTags?function(e,t){for(var n=[],r=0;r<e.length;){var i;(i=g.exec(e[r]))&&t.includes(i[1])&&(n.push({name:i[1],line:r,annotation:e[r].split("@"+i[1]+": ")[1]}),e.splice(r,1)),r++}return n}(j,i.customTags):[],S=t({},function(e){for(var n=t({},y),r=0;r<e.length;r++){var i=void 0;(i=m.exec(e[r]))?i[1]in n&&(n[i[1]]=!0,f("Setting options."+i[1]+" to true"),e.splice(r,1),r--):(i=g.exec(e[r]))&&i[1]in n&&(n[i[1]]=i[2],f("Setting options."+i[1]+" to "+i[2]),e.splice(r,1),r--)}return"errors"in n&&"string"==typeof n.errors&&(n.errors=n.errors.split(" ").map(Number),f("Setting options.error to ",n.errors)),n}(j),i.defaultOptions),T=function(e,n,r){for(var i=t({},n),o=0;o<e.length;){var s=void 0;if(s=m.exec(e[o]))i[s[1]]=!0,v(s[1],"true",i,r);else{if(!(s=g.exec(e[o]))){o++;continue}if("filename"===s[1]){o++;continue}v(s[1],s[2],i,r)}e.splice(o,1)}return i}(j,b,c);S.showEmittedFile||(S.showEmittedFile=T.jsx&&T.jsx===c.JsxEmit.Preserve?"index.jsx":"index.js");var O=function(){var e=__webpack_require__(622);return(i.vfsRoot||process.cwd()).split(e.sep).join(e.posix.sep)},k=!!i.fsMap,F=k&&i.fsMap?i.fsMap:new Map,P=k?e.createSystem(F):e.createFSBackedSystem(F,O(),c),q=k?"/":O()+"/",C=e.createVirtualTypeScriptEnvironment(P,[],c,T,i.customTransformers),A=C.languageService;n=j.join("\n");for(var I,M=[],L=[],_=[],R=function(e,t,n){for(var r,i=e.split(/\r\n?|\n/g),o=e.includes("@filename: "+t)?"global.ts":t,s=[],l=[],c=a(i);!(r=c()).done;){var u=r.value;u.includes("// @filename: ")?(l.push([n+o,s]),o=u.split("// @filename: ")[1].trim(),s=[]):s.push(u)}return l.push([n+o,s]),l.filter((function(e){return e[1].length>0&&(e[1].length>1||""!==e[1][0])}))}(n,x,q),$=["js","jsx","ts","tsx"],D=R.map((function(e){return e[0]})),U=function(){var e=I.value,t=e[0],n=e[1],r=t.split(".").pop()||"",i=T.resolveJsonModule&&"json"===r;if(!$.includes(r)&&!i)return"continue";var o=n.join("\n");C.createFile(t,o);var s=h(n);_=_.concat(s.highlights);var a=s.queries.map((function(e,n){var r=C.getSourceFile(t),i=c.getPositionOfLineAndCharacter(r,e.line,e.offset);switch(e.kind){case"query":var o=A.getQuickInfoAtPosition(t,i);if(!o||!o.displayParts)throw new p("Invalid QuickInfo query","The request on line "+e.line+" in "+t+" for quickinfo via ^? returned no from the compiler.","This is likely that the x positioning is off.");return{kind:"query",text:o.displayParts.map((function(e){return e.text})).join(""),docs:o.documentation?o.documentation.map((function(e){return e.text})).join("<br/>"):void 0,line:e.line-n,offset:e.offset,file:t};case"completion":var s=A.getCompletionsAtPosition(t,i-1,{});if(!s&&!S.noErrorValidation)throw new p("Invalid completion query","The request on line "+e.line+" in "+t+" for completions via ^| returned no completions from the compiler.","This is likely that the positioning is off.");var a=function(e,t){e=String(e),t=Number(t)>>>0;var n=e.slice(0,t+1).search(/\S+$/),r=e.slice(t).search(/\s/);return r<0?{word:e.slice(n),startPos:n}:{word:e.slice(n,r+t),startPos:n}}(r.text,i-1),l=r.text.slice(a.startPos,i).split(".").pop()||"";return{kind:"completions",completions:(null==s?void 0:s.entries)||[],completionPrefix:l,line:e.line-n,offset:e.offset,file:t}}}));M=M.concat(a);var l=n.join("\n");C.updateFile(t,l)},N=a(R);!(I=N()).done;)U();var B=n.split(/\r\n?|\n/g);h(B),n=B.join("\n"),S.emit&&D.forEach((function(e){var t=e.split(".").pop()||"";$.includes(t)&&A.getEmitOutput(e).outputFiles.forEach((function(e){P.writeFile(e.name,e.text)}))}));var G=[],V=[];D.forEach((function(e){var t=e.split(".").pop()||"";if($.includes(t)){S.noErrors||(G=G.concat(A.getSemanticDiagnostics(e),A.getSyntacticDiagnostics(e)));var r=C.sys.readFile(e),i=C.getSourceFile(e);if(!i)throw new p("Could not find a  TypeScript sourcefile for '"+e+"' in the Twoslash vfs","It's a little hard to provide useful advice on this error. Maybe you imported something which the compiler doesn't think is a source file?","");if(!S.showEmit){for(var o,s=-1==n.indexOf(r)?0:n.indexOf(r),l=n.slice(0,s).split("\n").length-1,u=a(S.noStaticSemanticInfo?[]:function(e,t){var n=[];return function r(i){e.forEachChild(i,(function(i){if(e.isIdentifier(i)){var o=i.getStart(t,!1);n.push({span:e.createTextSpan(o,i.end-o),text:i.getText(t)})}r(i)}))}(t),n}(c,i));!(o=u()).done;){var f=o.value,h=f.span,d=A.getQuickInfoAtPosition(e,h.start);if(d&&d.displayParts){var v=d.displayParts.map((function(e){return e.text})).join(""),m=f.text,g=d.documentation?d.documentation.map((function(e){return e.text})).join("\n"):void 0,y=h.start+s,w=c.createSourceFile("_.ts",n,c.ScriptTarget.ES2015),x=c.getLineAndCharacterOfPosition(w,y);V.push({text:v,docs:g,start:y,length:h.length,line:x.line,character:x.character,targetString:m})}}M.filter((function(t){return t.file===e})).forEach((function(e){var t=c.getPositionOfLineAndCharacter(i,e.line,e.offset)+s;switch(e.kind){case"query":L.push({docs:e.docs,kind:"query",start:t+s,length:e.text.length,text:e.text,offset:e.offset,line:e.line+l+1});break;case"completions":L.push({completions:e.completions,kind:"completions",start:t+s,completionsPrefix:e.completionPrefix,length:1,offset:e.offset,line:e.line+l+1})}}))}}}));var Q=G.filter((function(e){return e.file&&D.includes(e.file.fileName)}));!S.noErrorValidation&&Q.length&&function(e,t,n,r,i){var o=e.filter((function(e){return!t.errors.includes(e.code)})),s=Array.from(new Set(o.map((function(e){return e.code})))).join(" ");if(o.length){var a=new Set(e.map((function(e){return e.code}))),l="// @errors: "+Array.from(a).join(" "),c=t.errors.length?"\nThe existing annotation specified "+t.errors.join(" "):"\nExpected: "+l,u={},f=[];o.forEach((function(e){var t,n=(null==(t=e.file)?void 0:t.fileName)&&e.file.fileName.replace(i,"");if(n){var r=u[n];r?r.push(e):u[n]=[e]}else f.push(e)}));var h=function(e,t){return e+"\n  "+t.map((function(e){return"["+e.code+"] "+e.start+" - "+("string"==typeof e.messageText?e.messageText:e.messageText.messageText)})).join("\n  ")},d=[];f.length&&d.push(h("Ambient Errors",f)),Object.keys(u).forEach((function(e){d.push(h(e,u[e]))}));var v=d.join("\n\n"),m=new p("Errors were thrown in the sample, but not included in an errors tag","These errors were not marked as being expected: "+s+". "+c,"Compiler Errors:\n\n"+v);throw m.code="## Code\n\n'''"+n+"\n"+r+"\n'''",m}}(Q,S,r,d,q);for(var Y,z=[],J=a(Q);!(Y=J()).done;){var H=Y.value,K=C.sys.readFile(H.file.fileName),W=n.indexOf(K),X=c.flattenDiagnosticMessageText(H.messageText,"\n"),Z="err-"+H.code+"-"+H.start+"-"+H.length,ee=c.getLineAndCharacterOfPosition(H.file,H.start);z.push({category:H.category,code:H.code,length:H.length,start:H.start?H.start+W:void 0,line:ee.line,character:ee.character,renderedMessage:X,id:Z})}if(S.showEmit){var te=S.showEmittedFile||x,ne=q+te.replace(".jsx","").replace(".js","").replace(".d.ts","").replace(".map",""),re=D.find((function(e){return e===ne+".ts"||e===ne+".tsx"}));if(!re&&!T.outFile){var ie=D.join(", ");throw new p("Could not find source file to show the emit for","Cannot find the corresponding **source** file  "+te+" for completions via ^| returned no quickinfo from the compiler.","Looked for: "+ne+" in the vfs - which contains: "+ie)}T.outFile&&(re=D[0]);var oe=A.getEmitOutput(re),se=oe.outputFiles.find((function(e){return e.name===q+S.showEmittedFile||e.name===S.showEmittedFile}));if(!se){var ae=oe.outputFiles.map((function(e){return e.name})).join(", ");throw new p("Cannot find the output file in the Twoslash VFS","Looking for "+S.showEmittedFile+" in the Twoslash vfs after compiling",'Looked for" '+(q+S.showEmittedFile)+" in the vfs - which contains "+ae+".")}n=se.text,r=se.name.split(".").pop(),_=[],M=[],V=[]}var le="https://www.typescriptlang.org/play/#code/"+u.compressToEncodedURIComponent(d),ce="// ---cut---\n";if(n.includes(ce)){var ue=n.indexOf(ce)+ce.length,fe=n.substr(0,ue).split("\n").length-1;n=n.split(ce).pop(),V.forEach((function(e){e.start-=ue,e.line-=fe})),V=V.filter((function(e){return e.start>-1})),z.forEach((function(e){e.start&&(e.start-=ue),e.line&&(e.line-=fe)})),z=z.filter((function(e){return e.start&&e.start>-1})),_.forEach((function(e){e.start-=ue,e.line-=fe})),_=_.filter((function(e){return e.start>-1})),L.forEach((function(e){return e.line-=fe})),L=L.filter((function(e){return e.line>-1})),E.forEach((function(e){return e.line-=fe})),E=E.filter((function(e){return e.line>-1}))}if(n.includes("// ---cut-after---\n")){var pe=n.indexOf("// ---cut-after---\n")+"// ---cut-after---\n".length,he=n.substr(0,pe).split("\n").length-1;n=n.split("// ---cut-after---\n").shift().trimEnd(),V=V.filter((function(e){return e.line<he})),z=z.filter((function(e){return e.line&&e.line<he})),_=_.filter((function(e){return e.line<he})),L=L.filter((function(e){return e.line<he})),E=E.filter((function(e){return e.line<he}))}return{code:n,extension:r,highlights:_,queries:L,staticQuickInfos:V,errors:z,playgroundURL:le,tags:E}};
 //# sourceMappingURL=twoslash.cjs.production.min.js.map
 
 
@@ -6820,9 +6996,7 @@ try {
 } catch (error) {}
 
 var hasProcess = typeof process !== "undefined";
-var shouldDebug = hasLocalStorage &&
-/*#__PURE__*/
-localStorage.getItem("DEBUG") || hasProcess && process.env.DEBUG;
+var shouldDebug = hasLocalStorage && /*#__PURE__*/localStorage.getItem("DEBUG") || hasProcess && process.env.DEBUG;
 var debugLog = shouldDebug ? console.log : function (_message) {
   return "";
 };
@@ -6900,7 +7074,7 @@ function createVirtualTypeScriptEnvironment(sys, rootFiles, ts, compilerOptions,
 var knownLibFilesForCompilerOptions = function knownLibFilesForCompilerOptions(compilerOptions, ts) {
   var target = compilerOptions.target || ts.ScriptTarget.ES5;
   var lib = compilerOptions.lib || [];
-  var files = ["lib.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts", "lib.webworker.d.ts", "lib.webworker.importscripts.d.ts", "lib.scripthost.d.ts", "lib.es5.d.ts", "lib.es6.d.ts", "lib.es2015.collection.d.ts", "lib.es2015.core.d.ts", "lib.es2015.d.ts", "lib.es2015.generator.d.ts", "lib.es2015.iterable.d.ts", "lib.es2015.promise.d.ts", "lib.es2015.proxy.d.ts", "lib.es2015.reflect.d.ts", "lib.es2015.symbol.d.ts", "lib.es2015.symbol.wellknown.d.ts", "lib.es2016.array.include.d.ts", "lib.es2016.d.ts", "lib.es2016.full.d.ts", "lib.es2017.d.ts", "lib.es2017.full.d.ts", "lib.es2017.intl.d.ts", "lib.es2017.object.d.ts", "lib.es2017.sharedmemory.d.ts", "lib.es2017.string.d.ts", "lib.es2017.typedarrays.d.ts", "lib.es2018.asyncgenerator.d.ts", "lib.es2018.asynciterable.d.ts", "lib.es2018.d.ts", "lib.es2018.full.d.ts", "lib.es2018.intl.d.ts", "lib.es2018.promise.d.ts", "lib.es2018.regexp.d.ts", "lib.es2019.array.d.ts", "lib.es2019.d.ts", "lib.es2019.full.d.ts", "lib.es2019.object.d.ts", "lib.es2019.string.d.ts", "lib.es2019.symbol.d.ts", "lib.es2020.d.ts", "lib.es2020.full.d.ts", "lib.es2020.string.d.ts", "lib.es2020.symbol.wellknown.d.ts", "lib.es2020.bigint.d.ts", "lib.es2020.promise.d.ts", "lib.es2020.sharedmemory.d.ts", "lib.es2020.intl.d.ts", "lib.esnext.array.d.ts", "lib.esnext.asynciterable.d.ts", "lib.esnext.bigint.d.ts", "lib.esnext.d.ts", "lib.esnext.full.d.ts", "lib.esnext.intl.d.ts", "lib.esnext.symbol.d.ts"];
+  var files = ["lib.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts", "lib.webworker.d.ts", "lib.webworker.importscripts.d.ts", "lib.scripthost.d.ts", "lib.es5.d.ts", "lib.es6.d.ts", "lib.es2015.collection.d.ts", "lib.es2015.core.d.ts", "lib.es2015.d.ts", "lib.es2015.generator.d.ts", "lib.es2015.iterable.d.ts", "lib.es2015.promise.d.ts", "lib.es2015.proxy.d.ts", "lib.es2015.reflect.d.ts", "lib.es2015.symbol.d.ts", "lib.es2015.symbol.wellknown.d.ts", "lib.es2016.array.include.d.ts", "lib.es2016.d.ts", "lib.es2016.full.d.ts", "lib.es2017.d.ts", "lib.es2017.full.d.ts", "lib.es2017.intl.d.ts", "lib.es2017.object.d.ts", "lib.es2017.sharedmemory.d.ts", "lib.es2017.string.d.ts", "lib.es2017.typedarrays.d.ts", "lib.es2018.asyncgenerator.d.ts", "lib.es2018.asynciterable.d.ts", "lib.es2018.d.ts", "lib.es2018.full.d.ts", "lib.es2018.intl.d.ts", "lib.es2018.promise.d.ts", "lib.es2018.regexp.d.ts", "lib.es2019.array.d.ts", "lib.es2019.d.ts", "lib.es2019.full.d.ts", "lib.es2019.object.d.ts", "lib.es2019.string.d.ts", "lib.es2019.symbol.d.ts", "lib.es2020.d.ts", "lib.es2020.full.d.ts", "lib.es2020.string.d.ts", "lib.es2020.symbol.wellknown.d.ts", "lib.es2020.bigint.d.ts", "lib.es2020.promise.d.ts", "lib.es2020.sharedmemory.d.ts", "lib.es2020.intl.d.ts", "lib.es2021.d.ts", "lib.es2021.full.d.ts", "lib.es2021.promise.d.ts", "lib.es2021.string.d.ts", "lib.es2021.weakref.d.ts", "lib.esnext.d.ts", "lib.esnext.full.d.ts", "lib.esnext.intl.d.ts", "lib.esnext.promise.d.ts", "lib.esnext.string.d.ts", "lib.esnext.weakref.d.ts"];
   var targetToCut = ts.ScriptTarget[target];
   var matches = files.filter(function (f) {
     return f.startsWith("lib." + targetToCut.toLowerCase());
@@ -6934,13 +7108,12 @@ var knownLibFilesForCompilerOptions = function knownLibFilesForCompilerOptions(c
 var createDefaultMapFromNodeModules = function createDefaultMapFromNodeModules(compilerOptions, ts) {
   var tsModule = ts || __webpack_require__(34);
 
-  var path = __webpack_require__(622);
-
-  var fs = __webpack_require__(747);
+  var path = requirePath();
+  var fs = requireFS();
 
   var getLib = function getLib(name) {
-    var lib = __webpack_require__.ab + "lib";
-    return fs.readFileSync(__webpack_require__.ab + "lib/" + name, "utf8");
+    var lib = path.dirname(__webpack_require__.ab + "typescript.js");
+    return fs.readFileSync(path.join(lib, name), "utf8");
   };
 
   var libs = knownLibFilesForCompilerOptions(compilerOptions, tsModule);
@@ -6955,9 +7128,8 @@ var createDefaultMapFromNodeModules = function createDefaultMapFromNodeModules(c
  */
 
 var addAllFilesFromFolder = function addAllFilesFromFolder(map, workingDir) {
-  var path = __webpack_require__(622);
-
-  var fs = __webpack_require__(747);
+  var path = requirePath();
+  var fs = requireFS();
 
   var walk = function walk(dir) {
     var results = [];
@@ -7008,7 +7180,6 @@ var addFilesForTypesIntoFolder = function addFilesForTypesIntoFolder(map) {
 
 var createDefaultMapFromCDN = function createDefaultMapFromCDN(options, version, cache, ts, lzstring, fetcher, storer) {
   var fetchlike = fetcher || fetch;
-  var storelike = storer || localStorage;
   var fsMap = new Map();
   var files = knownLibFilesForCompilerOptions(options, ts);
   var prefix = "https://typescript.azureedge.net/cdn/" + version + "/typescript/lib/";
@@ -7036,6 +7207,7 @@ var createDefaultMapFromCDN = function createDefaultMapFromCDN(options, version,
 
 
   function cached() {
+    var storelike = storer || localStorage;
     var keys = Object.keys(localStorage);
     keys.forEach(function (key) {
       // Remove anything which isn't from this version
@@ -7171,12 +7343,10 @@ function createFSBackedSystem(files, _projectRoot, ts) {
   // We need to make an isolated folder for the tsconfig, but also need to be able to resolve the
   // existing node_modules structures going back through the history
   var root = _projectRoot + "/vfs";
-
-  var path = __webpack_require__(622); // The default System in TypeScript
-
+  var path = requirePath(); // The default System in TypeScript
 
   var nodeSys = ts.sys;
-  var tsLib = __webpack_require__.ab + "lib";
+  var tsLib = path.dirname(__webpack_require__.ab + "typescript.js");
   return {
     // @ts-ignore
     name: "fs-vfs",
@@ -7198,7 +7368,7 @@ function createFSBackedSystem(files, _projectRoot, ts) {
       if (fileName.includes("tsconfig.json") || fileName.includes("tsconfig.json")) return false;
 
       if (fileName.startsWith("/lib")) {
-        var tsLibName = __webpack_require__.ab + "lib/" + fileName.replace("/", "");
+        var tsLibName = tsLib + "/" + fileName.replace("/", "");
         return nodeSys.fileExists(tsLibName);
       }
 
@@ -7222,11 +7392,11 @@ function createFSBackedSystem(files, _projectRoot, ts) {
       if (files.has(fileName)) return files.get(fileName);
 
       if (fileName.startsWith("/lib")) {
-        var tsLibName = __webpack_require__.ab + "lib/" + fileName.replace("/", "");
+        var tsLibName = tsLib + "/" + fileName.replace("/", "");
         var result = nodeSys.readFile(tsLibName);
 
         if (!result) {
-          var libs = nodeSys.readDirectory(__webpack_require__.ab + "lib");
+          var libs = nodeSys.readDirectory(tsLib);
           throw new Error("TSVFS: A request was made for " + tsLibName + " but there wasn't a file found in the file map. You likely have a mismatch in the compiler options for the CDN download vs the compiler program. Existing Libs: " + libs + ".");
         }
 
@@ -7318,8 +7488,16 @@ function createVirtualLanguageServiceHost(sys, rootFiles, compilerOptions, ts, c
     getCustomTransformers: function getCustomTransformers() {
       return customTransformers;
     },
+    // A couple weeks of 4.8 TypeScript nightlies had a bug where the Program's
+    // list of files was just a reference to the array returned by this host method,
+    // which means mutations by the host that ought to result in a new Program being
+    // created were not detected, since the old list of files and the new list of files
+    // were in fact a reference to the same underlying array. That was fixed in
+    // https://github.com/microsoft/TypeScript/pull/49813, but since the twoslash runner
+    // is used in bisecting for changes, it needs to guard against being busted in that
+    // couple-week period, so we defensively make a slice here.
     getScriptFileNames: function getScriptFileNames() {
-      return fileNames;
+      return fileNames.slice();
     },
     getScriptSnapshot: function getScriptSnapshot(fileName) {
       var contents = sys.readFile(fileName);
@@ -7351,6 +7529,14 @@ function createVirtualLanguageServiceHost(sys, rootFiles, compilerOptions, ts, c
   };
   return lsHost;
 }
+
+var requirePath = function requirePath() {
+  return require(String.fromCharCode(112, 97, 116, 104));
+};
+
+var requireFS = function requireFS() {
+  return require(String.fromCharCode(102, 115));
+};
 
 exports.addAllFilesFromFolder = addAllFilesFromFolder;
 exports.addFilesForTypesIntoFolder = addFilesForTypesIntoFolder;
@@ -18429,7 +18615,7 @@ module.exports.parseURL = function (input, options) {
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
-function e(){return(e=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var i in r)Object.prototype.hasOwnProperty.call(r,i)&&(e[i]=r[i])}return e}).apply(this,arguments)}Object.defineProperty(exports,"__esModule",{value:!0});var t=!1;try{t="undefined"!=typeof localStorage}catch(e){}var r="undefined"!=typeof process,i=t&&localStorage.getItem("DEBUG")||r&&process.env.DEBUG?console.log:function(e){return""},n=function(e,t){var r,i=e.lib||[],n=["lib.d.ts","lib.dom.d.ts","lib.dom.iterable.d.ts","lib.webworker.d.ts","lib.webworker.importscripts.d.ts","lib.scripthost.d.ts","lib.es5.d.ts","lib.es6.d.ts","lib.es2015.collection.d.ts","lib.es2015.core.d.ts","lib.es2015.d.ts","lib.es2015.generator.d.ts","lib.es2015.iterable.d.ts","lib.es2015.promise.d.ts","lib.es2015.proxy.d.ts","lib.es2015.reflect.d.ts","lib.es2015.symbol.d.ts","lib.es2015.symbol.wellknown.d.ts","lib.es2016.array.include.d.ts","lib.es2016.d.ts","lib.es2016.full.d.ts","lib.es2017.d.ts","lib.es2017.full.d.ts","lib.es2017.intl.d.ts","lib.es2017.object.d.ts","lib.es2017.sharedmemory.d.ts","lib.es2017.string.d.ts","lib.es2017.typedarrays.d.ts","lib.es2018.asyncgenerator.d.ts","lib.es2018.asynciterable.d.ts","lib.es2018.d.ts","lib.es2018.full.d.ts","lib.es2018.intl.d.ts","lib.es2018.promise.d.ts","lib.es2018.regexp.d.ts","lib.es2019.array.d.ts","lib.es2019.d.ts","lib.es2019.full.d.ts","lib.es2019.object.d.ts","lib.es2019.string.d.ts","lib.es2019.symbol.d.ts","lib.es2020.d.ts","lib.es2020.full.d.ts","lib.es2020.string.d.ts","lib.es2020.symbol.wellknown.d.ts","lib.es2020.bigint.d.ts","lib.es2020.promise.d.ts","lib.es2020.sharedmemory.d.ts","lib.es2020.intl.d.ts","lib.esnext.array.d.ts","lib.esnext.asynciterable.d.ts","lib.esnext.bigint.d.ts","lib.esnext.d.ts","lib.esnext.full.d.ts","lib.esnext.intl.d.ts","lib.esnext.symbol.d.ts"],s=t.ScriptTarget[e.target||t.ScriptTarget.ES5],o=n.filter((function(e){return e.startsWith("lib."+s.toLowerCase())})),l=n.indexOf(o.pop()),a=((r=i.map((function(e){var t=n.filter((function(t){return t.startsWith("lib."+e.toLowerCase())}));return 0===t.length?0:n.indexOf(t.pop())})))&&r.length?r.reduce((function(e,t){return t>e?t:e})):void 0)||0,u=Math.max(l,a);return n.slice(0,u+1)},s=function(e,t){var r=__webpack_require__(622),i=__webpack_require__(747);(function e(t){var n=[];return i.readdirSync(t).forEach((function(s){s=r.join(t,s);var o=i.statSync(s);o&&o.isDirectory()?n=n.concat(e(s)):n.push(s)})),n})(t).forEach((function(n){var s="/node_modules/@types"+n.replace(t,""),o=i.readFileSync(n,"utf8");[".ts",".tsx"].includes(r.extname(s))&&e.set(s,o)}))};function o(e){throw new Error("Method '"+e+"' is not implemented.")}function l(e,t){return function(){for(var r=arguments.length,n=new Array(r),s=0;s<r;s++)n[s]=arguments[s];var o=t.apply(void 0,n),l="string"==typeof o?o.slice(0,80)+"...":o;return i.apply(void 0,["> "+e].concat(n)),i("< "+l),o}}var a=function(t){return e({},t.getDefaultCompilerOptions(),{jsx:t.JsxEmit.React,strict:!0,esModuleInterop:!0,module:t.ModuleKind.ESNext,suppressOutputPathCheck:!0,skipLibCheck:!0,skipDefaultLibCheck:!0,moduleResolution:t.ModuleResolutionKind.NodeJs})},u=function(e){return e.replace("/","/lib.").toLowerCase()};function c(t,r,i){var n=new Map;return{compilerHost:e({},t,{getCanonicalFileName:function(e){return e},getDefaultLibFileName:function(){return"/"+i.getDefaultLibFileName(r)},getDirectories:function(){return[]},getNewLine:function(){return t.newLine},getSourceFile:function(e){return n.get(e)||(s=i.createSourceFile(e,t.readFile(e),r.target||a(i).target,!1),n.set(s.fileName,s),s);var s},useCaseSensitiveFileNames:function(){return t.useCaseSensitiveFileNames}}),updateFile:function(e){var r=n.has(e.fileName);return t.writeFile(e.fileName,e.text),n.set(e.fileName,e),r}}}function f(t,r,i,n,s){var o=[].concat(r),l=c(t,i,n),a=l.compilerHost,u=l.updateFile,f=new Map,d=0;return{languageServiceHost:e({},a,{getProjectVersion:function(){return d.toString()},getCompilationSettings:function(){return i},getCustomTransformers:function(){return s},getScriptFileNames:function(){return o},getScriptSnapshot:function(e){var r=t.readFile(e);if(r)return n.ScriptSnapshot.fromString(r)},getScriptVersion:function(e){return f.get(e)||"0"},writeFile:t.writeFile}),updateFile:function(e){d++,f.set(e.fileName,d.toString()),o.includes(e.fileName)||o.push(e.fileName),u(e)}}}exports.addAllFilesFromFolder=s,exports.addFilesForTypesIntoFolder=function(e){return s(e,"node_modules/@types")},exports.createDefaultMapFromCDN=function(e,t,r,i,s,o,l){var a=o||fetch,u=l||localStorage,c=new Map,f=n(e,i),d="https://typescript.azureedge.net/cdn/"+t+"/typescript/lib/";return(r?function(){return Object.keys(localStorage).forEach((function(e){e.startsWith("ts-lib-")&&!e.startsWith("ts-lib-"+t)&&u.removeItem(e)})),Promise.all(f.map((function(e){var r,i="ts-lib-"+t+"-"+e,n=u.getItem(i);return n?Promise.resolve((r=n,s?s.decompressFromUTF16(r):r)):a(d+e).then((function(e){return e.text()})).then((function(e){var t;return u.setItem(i,(t=e,s?s.compressToUTF16(t):t)),e}))}))).then((function(e){e.forEach((function(e,t){c.set("/"+f[t],e)}))}))}:function(){return Promise.all(f.map((function(e){return a(d+e).then((function(e){return e.text()}))}))).then((function(e){e.forEach((function(e,t){return c.set("/"+f[t],e)}))}))})().then((function(){return c}))},exports.createDefaultMapFromNodeModules=function(e,t){var r=t||__webpack_require__(34),i=__webpack_require__(622),s=__webpack_require__(747),o=n(e,r),l=new Map;return o.forEach((function(e){l.set("/"+e,function(e){var t=__webpack_require__.ab + "lib";return s.readFileSync(__webpack_require__.ab + "lib/" + e,"utf8")}(e))})),l},exports.createFSBackedSystem=function(e,t,r){var i=t+"/vfs",n=__webpack_require__(622),s=r.sys,a=__webpack_require__.ab + "lib";return{name:"fs-vfs",root:i,args:[],createDirectory:function(){return o("createDirectory")},directoryExists:l("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))||s.directoryExists(t)})),exit:s.exit,fileExists:l("fileExists",(function(t){if(e.has(t))return!0;if(t.includes("tsconfig.json")||t.includes("tsconfig.json"))return!1;if(t.startsWith("/lib")){var r=__webpack_require__.ab + "lib/" + t.replace("/","");return s.fileExists(r)}return s.fileExists(t)})),getCurrentDirectory:function(){return i},getDirectories:s.getDirectories,getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:l("readDirectory",(function(){return"/"===(arguments.length<=0?void 0:arguments[0])?Array.from(e.keys()):s.readDirectory.apply(s,arguments)})),readFile:l("readFile",(function(t){if(e.has(t))return e.get(t);if(t.startsWith("/lib")){var r=__webpack_require__.ab + "lib/" + t.replace("/",""),i=s.readFile(r);if(!i){var n=s.readDirectory(__webpack_require__.ab + "lib");throw new Error("TSVFS: A request was made for "+r+" but there wasn't a file found in the file map. You likely have a mismatch in the compiler options for the CDN download vs the compiler program. Existing Libs: "+n+".")}return i}return s.readFile(t)})),resolvePath:function(t){return e.has(t)?t:s.resolvePath(t)},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createSystem=function(e){return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:l("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))})),exit:function(){return o("exit")},fileExists:l("fileExists",(function(t){return e.has(t)||e.has(u(t))})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:l("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:l("readFile",(function(t){return e.get(t)||e.get(u(t))})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createVirtualCompilerHost=c,exports.createVirtualLanguageServiceHost=f,exports.createVirtualTypeScriptEnvironment=function(t,r,i,n,s){void 0===n&&(n={});var o=e({},a(i),n),l=f(t,r,o,i,s),u=l.updateFile,d=i.createLanguageService(l.languageServiceHost),p=d.getCompilerOptionsDiagnostics();if(p.length){var g=c(t,n,i);throw new Error(i.formatDiagnostics(p,g.compilerHost))}return{name:"vfs",sys:t,languageService:d,getSourceFile:function(e){var t;return null==(t=d.getProgram())?void 0:t.getSourceFile(e)},createFile:function(e,t){u(i.createSourceFile(e,t,o.target,!1))},updateFile:function(e,t,r){var n=d.getProgram().getSourceFile(e);if(!n)throw new Error("Did not find a source file for "+e);var s=n.text,o=null!=r?r:i.createTextSpan(0,s.length),l=s.slice(0,o.start)+t+s.slice(o.start+o.length),a=i.updateSourceFile(n,l,{span:o,newLength:t.length});u(a)}}},exports.knownLibFilesForCompilerOptions=n;
+function e(){return(e=Object.assign||function(e){for(var t=1;t<arguments.length;t++){var r=arguments[t];for(var i in r)Object.prototype.hasOwnProperty.call(r,i)&&(e[i]=r[i])}return e}).apply(this,arguments)}Object.defineProperty(exports,"__esModule",{value:!0});var t=!1;try{t="undefined"!=typeof localStorage}catch(e){}var r="undefined"!=typeof process,i=t&&localStorage.getItem("DEBUG")||r&&process.env.DEBUG?console.log:function(e){return""},n=function(e,t){var r,i=e.lib||[],n=["lib.d.ts","lib.dom.d.ts","lib.dom.iterable.d.ts","lib.webworker.d.ts","lib.webworker.importscripts.d.ts","lib.scripthost.d.ts","lib.es5.d.ts","lib.es6.d.ts","lib.es2015.collection.d.ts","lib.es2015.core.d.ts","lib.es2015.d.ts","lib.es2015.generator.d.ts","lib.es2015.iterable.d.ts","lib.es2015.promise.d.ts","lib.es2015.proxy.d.ts","lib.es2015.reflect.d.ts","lib.es2015.symbol.d.ts","lib.es2015.symbol.wellknown.d.ts","lib.es2016.array.include.d.ts","lib.es2016.d.ts","lib.es2016.full.d.ts","lib.es2017.d.ts","lib.es2017.full.d.ts","lib.es2017.intl.d.ts","lib.es2017.object.d.ts","lib.es2017.sharedmemory.d.ts","lib.es2017.string.d.ts","lib.es2017.typedarrays.d.ts","lib.es2018.asyncgenerator.d.ts","lib.es2018.asynciterable.d.ts","lib.es2018.d.ts","lib.es2018.full.d.ts","lib.es2018.intl.d.ts","lib.es2018.promise.d.ts","lib.es2018.regexp.d.ts","lib.es2019.array.d.ts","lib.es2019.d.ts","lib.es2019.full.d.ts","lib.es2019.object.d.ts","lib.es2019.string.d.ts","lib.es2019.symbol.d.ts","lib.es2020.d.ts","lib.es2020.full.d.ts","lib.es2020.string.d.ts","lib.es2020.symbol.wellknown.d.ts","lib.es2020.bigint.d.ts","lib.es2020.promise.d.ts","lib.es2020.sharedmemory.d.ts","lib.es2020.intl.d.ts","lib.es2021.d.ts","lib.es2021.full.d.ts","lib.es2021.promise.d.ts","lib.es2021.string.d.ts","lib.es2021.weakref.d.ts","lib.esnext.d.ts","lib.esnext.full.d.ts","lib.esnext.intl.d.ts","lib.esnext.promise.d.ts","lib.esnext.string.d.ts","lib.esnext.weakref.d.ts"],s=t.ScriptTarget[e.target||t.ScriptTarget.ES5],o=n.filter((function(e){return e.startsWith("lib."+s.toLowerCase())})),l=n.indexOf(o.pop()),a=((r=i.map((function(e){var t=n.filter((function(t){return t.startsWith("lib."+e.toLowerCase())}));return 0===t.length?0:n.indexOf(t.pop())})))&&r.length?r.reduce((function(e,t){return t>e?t:e})):void 0)||0,u=Math.max(l,a);return n.slice(0,u+1)},s=function(e,t){var r=d(),i=p();(function e(t){var n=[];return i.readdirSync(t).forEach((function(s){s=r.join(t,s);var o=i.statSync(s);o&&o.isDirectory()?n=n.concat(e(s)):n.push(s)})),n})(t).forEach((function(n){var s="/node_modules/@types"+n.replace(t,""),o=i.readFileSync(n,"utf8");[".ts",".tsx"].includes(r.extname(s))&&e.set(s,o)}))};function o(e){throw new Error("Method '"+e+"' is not implemented.")}function l(e,t){return function(){for(var r=arguments.length,n=new Array(r),s=0;s<r;s++)n[s]=arguments[s];var o=t.apply(void 0,n),l="string"==typeof o?o.slice(0,80)+"...":o;return i.apply(void 0,["> "+e].concat(n)),i("< "+l),o}}var a=function(t){return e({},t.getDefaultCompilerOptions(),{jsx:t.JsxEmit.React,strict:!0,esModuleInterop:!0,module:t.ModuleKind.ESNext,suppressOutputPathCheck:!0,skipLibCheck:!0,skipDefaultLibCheck:!0,moduleResolution:t.ModuleResolutionKind.NodeJs})},u=function(e){return e.replace("/","/lib.").toLowerCase()};function c(t,r,i){var n=new Map;return{compilerHost:e({},t,{getCanonicalFileName:function(e){return e},getDefaultLibFileName:function(){return"/"+i.getDefaultLibFileName(r)},getDirectories:function(){return[]},getNewLine:function(){return t.newLine},getSourceFile:function(e){return n.get(e)||(s=i.createSourceFile(e,t.readFile(e),r.target||a(i).target,!1),n.set(s.fileName,s),s);var s},useCaseSensitiveFileNames:function(){return t.useCaseSensitiveFileNames}}),updateFile:function(e){var r=n.has(e.fileName);return t.writeFile(e.fileName,e.text),n.set(e.fileName,e),r}}}function f(t,r,i,n,s){var o=[].concat(r),l=c(t,i,n),a=l.compilerHost,u=l.updateFile,f=new Map,d=0;return{languageServiceHost:e({},a,{getProjectVersion:function(){return d.toString()},getCompilationSettings:function(){return i},getCustomTransformers:function(){return s},getScriptFileNames:function(){return o.slice()},getScriptSnapshot:function(e){var r=t.readFile(e);if(r)return n.ScriptSnapshot.fromString(r)},getScriptVersion:function(e){return f.get(e)||"0"},writeFile:t.writeFile}),updateFile:function(e){d++,f.set(e.fileName,d.toString()),o.includes(e.fileName)||o.push(e.fileName),u(e)}}}var d=function(){return require(String.fromCharCode(112,97,116,104))},p=function(){return require(String.fromCharCode(102,115))};exports.addAllFilesFromFolder=s,exports.addFilesForTypesIntoFolder=function(e){return s(e,"node_modules/@types")},exports.createDefaultMapFromCDN=function(e,t,r,i,s,o,l){var a=o||fetch,u=new Map,c=n(e,i),f="https://typescript.azureedge.net/cdn/"+t+"/typescript/lib/";return(r?function(){var e=l||localStorage;return Object.keys(localStorage).forEach((function(r){r.startsWith("ts-lib-")&&!r.startsWith("ts-lib-"+t)&&e.removeItem(r)})),Promise.all(c.map((function(r){var i,n="ts-lib-"+t+"-"+r,o=e.getItem(n);return o?Promise.resolve((i=o,s?s.decompressFromUTF16(i):i)):a(f+r).then((function(e){return e.text()})).then((function(t){var r;return e.setItem(n,(r=t,s?s.compressToUTF16(r):r)),t}))}))).then((function(e){e.forEach((function(e,t){u.set("/"+c[t],e)}))}))}:function(){return Promise.all(c.map((function(e){return a(f+e).then((function(e){return e.text()}))}))).then((function(e){e.forEach((function(e,t){return u.set("/"+c[t],e)}))}))})().then((function(){return u}))},exports.createDefaultMapFromNodeModules=function(e,t){var r=t||__webpack_require__(34),i=d(),s=p(),o=n(e,r),l=new Map;return o.forEach((function(e){l.set("/"+e,function(e){var t=i.dirname(__webpack_require__.ab + "typescript.js");return s.readFileSync(i.join(t,e),"utf8")}(e))})),l},exports.createFSBackedSystem=function(e,t,r){var i=t+"/vfs",n=d(),s=r.sys,a=n.dirname(__webpack_require__.ab + "typescript.js");return{name:"fs-vfs",root:i,args:[],createDirectory:function(){return o("createDirectory")},directoryExists:l("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))||s.directoryExists(t)})),exit:s.exit,fileExists:l("fileExists",(function(t){if(e.has(t))return!0;if(t.includes("tsconfig.json")||t.includes("tsconfig.json"))return!1;if(t.startsWith("/lib")){var r=a+"/"+t.replace("/","");return s.fileExists(r)}return s.fileExists(t)})),getCurrentDirectory:function(){return i},getDirectories:s.getDirectories,getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:l("readDirectory",(function(){return"/"===(arguments.length<=0?void 0:arguments[0])?Array.from(e.keys()):s.readDirectory.apply(s,arguments)})),readFile:l("readFile",(function(t){if(e.has(t))return e.get(t);if(t.startsWith("/lib")){var r=a+"/"+t.replace("/",""),i=s.readFile(r);if(!i){var n=s.readDirectory(a);throw new Error("TSVFS: A request was made for "+r+" but there wasn't a file found in the file map. You likely have a mismatch in the compiler options for the CDN download vs the compiler program. Existing Libs: "+n+".")}return i}return s.readFile(t)})),resolvePath:function(t){return e.has(t)?t:s.resolvePath(t)},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createSystem=function(e){return{args:[],createDirectory:function(){return o("createDirectory")},directoryExists:l("directoryExists",(function(t){return Array.from(e.keys()).some((function(e){return e.startsWith(t)}))})),exit:function(){return o("exit")},fileExists:l("fileExists",(function(t){return e.has(t)||e.has(u(t))})),getCurrentDirectory:function(){return"/"},getDirectories:function(){return[]},getExecutingFilePath:function(){return o("getExecutingFilePath")},readDirectory:l("readDirectory",(function(t){return"/"===t?Array.from(e.keys()):[]})),readFile:l("readFile",(function(t){return e.get(t)||e.get(u(t))})),resolvePath:function(e){return e},newLine:"\n",useCaseSensitiveFileNames:!0,write:function(){return o("write")},writeFile:function(t,r){e.set(t,r)}}},exports.createVirtualCompilerHost=c,exports.createVirtualLanguageServiceHost=f,exports.createVirtualTypeScriptEnvironment=function(t,r,i,n,s){void 0===n&&(n={});var o=e({},a(i),n),l=f(t,r,o,i,s),u=l.updateFile,d=i.createLanguageService(l.languageServiceHost),p=d.getCompilerOptionsDiagnostics();if(p.length){var g=c(t,n,i);throw new Error(i.formatDiagnostics(p,g.compilerHost))}return{name:"vfs",sys:t,languageService:d,getSourceFile:function(e){var t;return null==(t=d.getProgram())?void 0:t.getSourceFile(e)},createFile:function(e,t){u(i.createSourceFile(e,t,o.target,!1))},updateFile:function(e,t,r){var n=d.getProgram().getSourceFile(e);if(!n)throw new Error("Did not find a source file for "+e);var s=n.text,o=null!=r?r:i.createTextSpan(0,s.length),l=s.slice(0,o.start)+t+s.slice(o.start+o.length),a=i.updateSourceFile(n,l,{span:o,newLength:t.length});u(a)}}},exports.knownLibFilesForCompilerOptions=n;
 //# sourceMappingURL=vfs.cjs.production.min.js.map
 
 

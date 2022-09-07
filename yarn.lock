@@ -778,19 +778,19 @@
   dependencies:
     "@types/yargs-parser" "*"
 
-"@typescript/twoslash@^3.1.1":
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/@typescript/twoslash/-/twoslash-3.1.1.tgz#56c838c322513f87da613461d8586457f5eed3be"
-  integrity sha512-Y3QdwubAUbMy2M2aZqFquc0fS+cJ6YlqabdGT61m7jvgF49t6nat+MxJ/VT03GpaZWDPU4docH9rz8kXMdsE2A==
+"@typescript/twoslash@^1.1.1":
+  version "1.1.7"
+  resolved "https://registry.yarnpkg.com/@typescript/twoslash/-/twoslash-1.1.7.tgz#9fc5709f37940f2deda396b74e503c6c33c54d6e"
+  integrity sha512-+oASPajHbUpmwsZgf0/ioBn9vjIodAO4c0na2nMLWxBKDMGAo16m8uEFtxjIrEYp6l+h3rBvHchSFucv1/qcNQ==
   dependencies:
-    "@typescript/vfs" "1.3.6"
+    "@typescript/vfs" "1.3.4"
     debug "^4.1.1"
     lz-string "^1.4.4"
 
-"@typescript/vfs@1.3.6":
-  version "1.3.6"
-  resolved "https://registry.yarnpkg.com/@typescript/vfs/-/vfs-1.3.6.tgz#02ed6de964ecdd73cd71a506b78e50e177682291"
-  integrity sha512-VSLn7rs46Qhe4gYxbK1/IB4NPLvgKl0I6SgeVyJwW5efYAELvDVqf1gVOG7JaKtW8qlMtBaZP02/4TRN39AkEQ==
+"@typescript/vfs@1.3.4":
+  version "1.3.4"
+  resolved "https://registry.yarnpkg.com/@typescript/vfs/-/vfs-1.3.4.tgz#07f89d2114f6e29255d589395ed7f3b4af8a00c2"
+  integrity sha512-RbyJiaAGQPIcAGWFa3jAXSuAexU4BFiDRF1g3hy7LmRqfNpYlTQWGXjcrOaVZjJ8YkkpuwG0FcsYvtWQpd9igQ==
   dependencies:
     debug "^4.1.1"
 

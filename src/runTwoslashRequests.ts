@@ -26,7 +26,7 @@ export function runTwoslashRequests(issue: Issue, request: TwoslashRequest): Two
   const oldResults = getResultCommentInfoForRequest(issue.comments.nodes, request)
   const tsRoot = getTypeScriptDir()
   const nightlyTs = require(join(tsRoot, 'nightly'))
-  let latestRun = runTwoSlash('Nightly')(request, nightlyTs)
+  let latestRun = runTwoSlash('Nightly')(request, nightlyTs, join(tsRoot, 'nightly', 'lib'))
 
   if (!oldResults) {
     const olderRuns = runTwoSlashOnOlderVersions(request)
@@ -48,7 +48,7 @@ export const runTwoSlashOnOlderVersions = (request: TwoslashRequest) => {
   const tsVersions = readdirSync(tsRoot).filter(f => f !== 'nightly')
   return tsVersions.map(tsVersion => {
     const ts = require(join(tsRoot, tsVersion))
-    return runTwoSlash(tsVersion)(request, ts)
+    return runTwoSlash(tsVersion)(request, ts, join(tsRoot, tsVersion, 'lib'))
   })
 }
 
@@ -56,14 +56,18 @@ export const runTwoSlashOnOlderVersions = (request: TwoslashRequest) => {
 //
 export const runTwoSlash =
   (label: string) =>
-  (request: TwoslashRequest, ts: any): TwoslashResult => {
+  (request: TwoslashRequest, ts: any, tsLibDirectory: string): TwoslashResult => {
     let result: ReturnType<typeof twoslasher>
     const start = new Date()
     const getTime = () => Math.round(new Date().getTime() - start.getTime())
 
     try {
       const opts = {noErrorValidation: true, noStaticSemanticInfo: true}
-      result = twoslasher(request.block.content, request.block.lang, {defaultOptions: opts, tsModule: ts})
+      result = twoslasher(request.block.content, request.block.lang, {
+        defaultOptions: opts,
+        tsModule: ts,
+        tsLibDirectory
+      })
     } catch (error: any) {
       return {
         assertions: [],

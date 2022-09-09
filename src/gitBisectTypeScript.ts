@@ -146,6 +146,7 @@ function buildAndRun(request: TwoslashRequest, context: Context) {
       block: request.block,
       description: ''
     },
-    require(tsPath)
+    require(tsPath),
+    join(context.workspace, 'built/local')
   )
 }

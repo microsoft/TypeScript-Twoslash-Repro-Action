@@ -67,9 +67,7 @@ interface BisectRevisions {
   oldResult: TwoslashResult
 }
 
-function getRevisionsFromPreviousRun(
-  resultComment: InfoComment<EmbeddedTwoslashResult>,
-): BisectRevisions | undefined {
+function getRevisionsFromPreviousRun(resultComment: InfoComment<EmbeddedTwoslashResult>): BisectRevisions | undefined {
   let newResult: TwoslashResult | undefined
   let oldResult: TwoslashResult | undefined
   for (let i = resultComment.info.runs.length - 1; i >= 0; i--) {

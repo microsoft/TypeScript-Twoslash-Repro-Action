@@ -10,7 +10,7 @@ export function gitBisect(
   sha: string,
   output: string
 }> {
-  execSync(`git bisect start ${newRef} ${oldRef} --`, { cwd });
+  execSync(`git bisect start ${newRef} ${oldRef} -- ./src`, { cwd });
   
   const server = createServer(async (_, res) => {
     try {
@@ -23,7 +23,7 @@ export function gitBisect(
 
   server.listen(3000);
   return new Promise((resolve, reject) => {
-    exec("git bisect run sh -c 'exit `curl -s http://localhost:3000`'", { encoding: 'utf8', cwd }, (err, stdout, stderr) => {
+    exec("git bisect run sh -c 'exit `curl -s http://localhost:3000`'", { encoding: 'utf8', cwd }, (err, stdout) => {
       server.close();
       if (err) {
         return reject(err);

@@ -22,7 +22,7 @@ export async function gitBisectTypeScript(context: Context, issue: Issue): Promi
   const bisectRevisions =
     getRevisionsFromContext(context, request) ||
     getRevisionsFromComment(issue, request, context) ||
-    (resultComment && getRevisionsFromPreviousRun(resultComment, context))
+    (resultComment && getRevisionsFromPreviousRun(resultComment))
   if (!bisectRevisions) return
 
   const {output, sha} = await gitBisect(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
@@ -69,7 +69,6 @@ interface BisectRevisions {
 
 function getRevisionsFromPreviousRun(
   resultComment: InfoComment<EmbeddedTwoslashResult>,
-  context: Context
 ): BisectRevisions | undefined {
   let newResult: TwoslashResult | undefined
   let oldResult: TwoslashResult | undefined
@@ -85,9 +84,8 @@ function getRevisionsFromPreviousRun(
   if (oldResult && newResult) {
     const oldRef = `v${oldResult.label}`
     const newRef = newResult.label === 'Nightly' ? resultComment.info.typescriptSha : `v${newResult.label}`
-    const oldMergeBase = execSync(`git merge-base ${oldRef} main`, {cwd: context.workspace, encoding: 'utf8'}).trim()
     return {
-      oldRef: oldMergeBase,
+      oldRef,
       newRef,
       oldLabel: oldResult.label,
       newLabel: newResult.label,
@@ -117,11 +115,10 @@ function tryGetRevisionsFromText(
   const match = text.match(bisectCommentRegExp)
   if (match) {
     const [, oldLabel, newLabel] = match
-    const oldRef = execSync(`git merge-base ${oldLabel} main`, {cwd: context.workspace, encoding: 'utf8'}).trim()
-    execSync(`git checkout ${oldRef}`, {cwd: context.workspace})
+    execSync(`git checkout ${oldLabel}`, {cwd: context.workspace})
     const oldResult = buildAndRun(request, context)
     return {
-      oldRef,
+      oldRef: oldLabel,
       newRef: newLabel,
       oldLabel,
       newLabel,

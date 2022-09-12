@@ -1,15 +1,15 @@
 import {getInput} from '@actions/core'
 
 export interface Context {
-  token: string;
-  owner: string;
-  name: string;
-  label: string;
-  tag: string;
-  issue: string | undefined;
-  bisect: string | undefined;
-  workspace: string;
-  dryRun: boolean;
+  token: string
+  owner: string
+  name: string
+  label: string
+  tag: string
+  issue: string | undefined
+  bisect: string | undefined
+  workspace: string
+  dryRun: boolean
 }
 
 export const getContext = () => {
@@ -33,7 +33,7 @@ export const getContext = () => {
     issue,
     bisect,
     workspace,
-    dryRun,
+    dryRun
   }
 
   return ctx

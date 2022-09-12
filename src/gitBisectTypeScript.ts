@@ -109,20 +109,24 @@ function getRevisionsFromComment(
   }
 }
 
-function tryGetRevisionsFromText(text: string, request: TwoslashRequest, context: Context): BisectRevisions | undefined {
+function tryGetRevisionsFromText(
+  text: string,
+  request: TwoslashRequest,
+  context: Context
+): BisectRevisions | undefined {
   const match = text.match(bisectCommentRegExp)
   if (match) {
     const [, oldLabel, newLabel] = match
     const oldRef = execSync(`git merge-base ${oldLabel} main`, {cwd: context.workspace, encoding: 'utf8'}).trim()
-      execSync(`git checkout ${oldRef}`, {cwd: context.workspace})
-      const oldResult = buildAndRun(request, context)
-      return {
-        oldRef,
-        newRef: newLabel,
-        oldLabel,
-        newLabel,
-        oldResult
-      }
+    execSync(`git checkout ${oldRef}`, {cwd: context.workspace})
+    const oldResult = buildAndRun(request, context)
+    return {
+      oldRef,
+      newRef: newLabel,
+      oldLabel,
+      newLabel,
+      oldResult
+    }
   }
 }
 

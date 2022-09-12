@@ -10,8 +10,9 @@ const testCtx: Context = {
   token: '123456',
   tag: 'repro',
   workspace: '',
-  bisectIssue: undefined,
-  runIssue: undefined,
+  bisect: undefined,
+  issue: undefined,
+  dryRun: false,
 }
 
 const oneCodeBlock = ` comment blah

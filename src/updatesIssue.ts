@@ -10,7 +10,7 @@ import {API} from './utils/api'
 import {getTypeScriptNightlyVersion} from './utils/getTypeScriptNightlyVersion'
 import {TwoslashRequest} from './getRequestsFromIssue'
 import {BisectResult} from './gitBisectTypeScript'
-import { Context } from './getContext'
+import {Context} from './getContext'
 
 export async function fixOrDeleteOldComments(issue: Issue, api: API, context: Context): Promise<Issue> {
   const outdatedComments = getAllTypeScriptBotComments(issue.comments.nodes)

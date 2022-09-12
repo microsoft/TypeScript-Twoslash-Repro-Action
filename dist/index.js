@@ -83,19 +83,21 @@ const getContext = () => {
     const workspace = process.env.GITHUB_WORKSPACE;
     const label = (0, core_1.getInput)('label') || 'Has Repro';
     const tag = (0, core_1.getInput)('code-tag') || 'repro';
-    const runIssue = (0, core_1.getInput)('issue') || process.env.ISSUE;
-    const bisectIssue = (0, core_1.getInput)('bisect') || process.env.BISECT_ISSUE;
+    const issue = (0, core_1.getInput)('issue') || process.env.ISSUE;
+    const bisect = (0, core_1.getInput)('bisect') || process.env.BISECT;
     const owner = repo.split('/')[0];
     const name = repo.split('/')[1];
+    const dryRun = !!process.env.DRY;
     const ctx = {
         token,
         owner,
         name,
         label,
         tag,
-        runIssue,
-        bisectIssue,
-        workspace
+        issue,
+        bisect,
+        workspace,
+        dryRun
     };
     return ctx;
 };
@@ -120,8 +122,8 @@ async function getIssue(context, issue) {
 exports.getIssue = getIssue;
 async function getIssues(context) {
     const octokit = (0, github_1.getOctokit)(context.token);
-    if (context.runIssue) {
-        return [await getIssue(context, parseInt(context.runIssue, 10))];
+    if (context.issue) {
+        return [await getIssue(context, parseInt(context.issue, 10))];
     }
     const req = issuesQuery(context.owner, context.name, context.label);
     const initialIssues = (await octokit.graphql(req.query, Object.assign({}, req.vars)));
@@ -265,7 +267,8 @@ async function gitBisectTypeScript(context, issue) {
     const requests = (0, getRequestsFromIssue_1.getRequestsFromIssue)(context)(issue);
     const request = requests[requests.length - 1];
     const resultComment = request && (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
-    const bisectRevisions = getRevisionsFromComment(issue, request, context) ||
+    const bisectRevisions = getRevisionsFromContext(context, request) ||
+        getRevisionsFromComment(issue, request, context) ||
         (resultComment && getRevisionsFromPreviousRun(resultComment, context));
     if (!bisectRevisions)
         return;
@@ -317,36 +320,42 @@ function getRevisionsFromPreviousRun(resultComment, context) {
         const oldRef = `v${oldResult.label}`;
         const newRef = newResult.label === 'Nightly' ? resultComment.info.typescriptSha : `v${newResult.label}`;
         const oldMergeBase = (0, child_process_1.execSync)(`git merge-base ${oldRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
-        const newMergeBase = (0, child_process_1.execSync)(`git merge-base ${newRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
         return {
             oldRef: oldMergeBase,
-            newRef: newMergeBase,
+            newRef,
             oldLabel: oldResult.label,
             newLabel: newResult.label,
             oldResult
         };
     }
 }
-const bisectCommentRegExp = /^@typescript-bot bisect (?:this )?(?:good|old) ([^\s]+) (?:bad|new) ([^\s]+)/;
+const bisectCommentRegExp = /^(?:@typescript-bot bisect (?:this )?)?(?:good|old) ([^\s]+) (?:bad|new) ([^\s]+)/;
 function getRevisionsFromComment(issue, request, context) {
     for (let i = issue.comments.nodes.length - 1; i >= 0; i--) {
         const comment = issue.comments.nodes[i];
-        const match = comment.body.match(bisectCommentRegExp);
-        if (match) {
-            const [, oldLabel, newLabel] = match;
-            const oldRef = (0, child_process_1.execSync)(`git merge-base ${oldLabel} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
-            const newRef = (0, child_process_1.execSync)(`git merge-base ${newLabel} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
-            (0, child_process_1.execSync)(`git checkout ${oldRef}`, { cwd: context.workspace });
-            const oldResult = buildAndRun(request, context);
-            return {
-                oldRef,
-                newRef,
-                oldLabel,
-                newLabel,
-                oldResult
-            };
-        }
+        const revs = tryGetRevisionsFromText(comment.body, request, context);
+        if (revs)
+            return revs;
     }
+}
+function tryGetRevisionsFromText(text, request, context) {
+    const match = text.match(bisectCommentRegExp);
+    if (match) {
+        const [, oldLabel, newLabel] = match;
+        const oldRef = (0, child_process_1.execSync)(`git merge-base ${oldLabel} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
+        (0, child_process_1.execSync)(`git checkout ${oldRef}`, { cwd: context.workspace });
+        const oldResult = buildAndRun(request, context);
+        return {
+            oldRef,
+            newRef: newLabel,
+            oldLabel,
+            newLabel,
+            oldResult
+        };
+    }
+}
+function getRevisionsFromContext(context, request) {
+    return tryGetRevisionsFromText(context.bisect, request, context);
 }
 function buildAndRun(request, context) {
     try {
@@ -474,12 +483,14 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createCommentText = exports.updateIssue = exports.postBisectComment = exports.fixOrDeleteOldComments = void 0;
 const getExistingComments_1 = __nccwpck_require__(2408);
 const getTypeScriptNightlyVersion_1 = __nccwpck_require__(1371);
-async function fixOrDeleteOldComments(issue, api) {
+async function fixOrDeleteOldComments(issue, api, context) {
     const outdatedComments = (0, getExistingComments_1.getAllTypeScriptBotComments)(issue.comments.nodes)
         .filter(c => c.info.version !== 1)
         .map(c => c.comment);
-    for (const comment of outdatedComments) {
-        await api.deleteComment(comment.id);
+    if (!context.dryRun) {
+        for (const comment of outdatedComments) {
+            await api.deleteComment(comment.id);
+        }
     }
     if (outdatedComments.length) {
         return Object.assign(Object.assign({}, issue), { comments: { nodes: issue.comments.nodes.filter(c => !outdatedComments.includes(c)) } });
@@ -20052,11 +20063,14 @@ async function run() {
     const ctx = (0, getContext_1.getContext)();
     const api = (0, api_1.createAPI)(ctx);
     console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`);
-    if (ctx.bisectIssue) {
-        let issue = await (0, getIssues_1.getIssue)(ctx, parseInt(ctx.bisectIssue, 10));
-        issue = await (0, updatesIssue_1.fixOrDeleteOldComments)(issue, api);
+    if (ctx.bisect) {
+        if (!ctx.issue) {
+            throw new Error('Must provide an issue number to bisect');
+        }
+        let issue = await (0, getIssues_1.getIssue)(ctx, parseInt(ctx.issue, 10));
+        issue = await (0, updatesIssue_1.fixOrDeleteOldComments)(issue, api, ctx);
         const result = await (0, gitBisectTypeScript_1.gitBisectTypeScript)(ctx, issue);
-        if (result) {
+        if (result && !ctx.dryRun) {
             await (0, updatesIssue_1.postBisectComment)(issue, result, api);
         }
         return;
@@ -20068,11 +20082,13 @@ async function run() {
         process.stdout.write('.');
         if (issues.indexOf(issue) % 10)
             console.log('');
-        issue = await (0, updatesIssue_1.fixOrDeleteOldComments)(issue, api);
+        issue = await (0, updatesIssue_1.fixOrDeleteOldComments)(issue, api, ctx);
         const requests = (0, getRequestsFromIssue_1.getRequestsFromIssue)(ctx)(issue);
         for (const request of requests) {
             const results = (0, runTwoslashRequests_1.runTwoslashRequests)(issue, request);
-            await (0, updatesIssue_1.updateIssue)(request, issue, results, api);
+            if (!ctx.dryRun) {
+                await (0, updatesIssue_1.updateIssue)(request, issue, results, api);
+            }
         }
     }
 }

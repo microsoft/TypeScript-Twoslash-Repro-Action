@@ -35,6 +35,18 @@ $ yarn test
   ...
 ```
 
+Run or debug locally  
+```bash
+yarn build
+
+GITHUB_WORKSPACE=/absolute/path/to/TypeScript \
+GITHUB_TOKEN=$token \          # will comment without DRY!
+DRY=1 \                        # do not post results comment
+ISSUE=50635 \                  # optional
+BISECT="good 4.7.3 bad main" \ # optional
+node lib/_main.js
+```
+
 ## To publish
 
 Actions are run from GitHub repos so we will check-in the packed dist folder. 

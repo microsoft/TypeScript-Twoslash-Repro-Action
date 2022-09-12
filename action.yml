@@ -20,9 +20,13 @@ inputs:
     description: 'What tag should be applied to the markdown code block?'
     default: 'repro'
 
+  issue:
+    required: false
+    description: 'Limits analysis to a single issue'
+
   bisect:
     required: false
-    description: 'Request a git bisect against an issue that already has a repro. Value is the issue number.'
+    description: 'Runs a git bisect on an existing repro. Requires `issue` to be set. Value can be revision labels (e.g. `good v4.7.3 bad main`) or `true` to infer bisect range.'
 
 runs:
   using: 'node16'

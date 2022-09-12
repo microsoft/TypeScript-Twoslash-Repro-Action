@@ -12,12 +12,15 @@ async function run() {
   const api = createAPI(ctx)
   console.log(`Context: ${JSON.stringify(ctx, null, '  ')}`)
 
-  if (ctx.bisectIssue) {
-    let issue = await getIssue(ctx, parseInt(ctx.bisectIssue, 10))
-    issue = await fixOrDeleteOldComments(issue, api)
+  if (ctx.bisect) {
+    if (!ctx.issue) {
+      throw new Error('Must provide an issue number to bisect')
+    }
+    let issue = await getIssue(ctx, parseInt(ctx.issue, 10))
+    issue = await fixOrDeleteOldComments(issue, api, ctx)
 
     const result = await gitBisectTypeScript(ctx, issue)
-    if (result) {
+    if (result && !ctx.dryRun) {
       await postBisectComment(issue, result, api)
     }
     return
@@ -32,11 +35,13 @@ async function run() {
     process.stdout.write('.')
     if (issues.indexOf(issue) % 10) console.log('')
 
-    issue = await fixOrDeleteOldComments(issue, api)
+    issue = await fixOrDeleteOldComments(issue, api, ctx)
     const requests = getRequestsFromIssue(ctx)(issue)
     for (const request of requests) {
       const results = runTwoslashRequests(issue, request)
-      await updateIssue(request, issue, results, api)
+      if (!ctx.dryRun) {
+        await updateIssue(request, issue, results, api)
+      }
     }
   }
 }

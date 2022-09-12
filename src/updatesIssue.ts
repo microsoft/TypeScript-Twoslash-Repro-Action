@@ -10,13 +10,16 @@ import {API} from './utils/api'
 import {getTypeScriptNightlyVersion} from './utils/getTypeScriptNightlyVersion'
 import {TwoslashRequest} from './getRequestsFromIssue'
 import {BisectResult} from './gitBisectTypeScript'
+import {Context} from './getContext'
 
-export async function fixOrDeleteOldComments(issue: Issue, api: API): Promise<Issue> {
+export async function fixOrDeleteOldComments(issue: Issue, api: API, context: Context): Promise<Issue> {
   const outdatedComments = getAllTypeScriptBotComments(issue.comments.nodes)
     .filter(c => c.info.version !== 1)
     .map(c => c.comment)
-  for (const comment of outdatedComments) {
-    await api.deleteComment(comment.id)
+  if (!context.dryRun) {
+    for (const comment of outdatedComments) {
+      await api.deleteComment(comment.id)
+    }
   }
   if (outdatedComments.length) {
     return {

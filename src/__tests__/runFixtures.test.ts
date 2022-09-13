@@ -13,7 +13,7 @@
 // expect.extend({ toMatchFile })
 
 // /* You can use the following command to add/update fixtures with an existing PR
-  
+
 //   env BOT_AUTH_TOKEN=XYZ npm run create-fixture -- 43164
 
 // .*/
@@ -62,4 +62,4 @@
 //   })
 // })
 
-test("", () =>{})
+test('', () => {})

@@ -274,6 +274,7 @@ async function gitBisectTypeScript(context, issue) {
         return;
     const { output, sha } = await (0, gitBisect_1.gitBisect)(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
         const result = buildAndRun(request, context);
+        console.log(result);
         (0, child_process_1.execSync)(`git checkout . && git clean -f`, { cwd: context.workspace });
         return resultsAreEqual(bisectRevisions.oldResult, result);
     });
@@ -758,7 +759,11 @@ function gitBisect(cwd, oldRef, newRef, isSameAsOld) {
     (0, child_process_1.execSync)(`git bisect start ${newRef} ${oldRef} -- ./src`, { cwd });
     const server = (0, http_1.createServer)(async (_, res) => {
         try {
-            res.writeHead(200).end(await isSameAsOld() ? '0' : '1');
+            const isSame = await isSameAsOld();
+            const rev = (0, child_process_1.execSync)(`git rev-parse HEAD`, { cwd, encoding: 'utf8' });
+            console.log(`${rev} is ${isSame ? 'good' : 'bad'}`);
+            console.log('');
+            res.writeHead(200).end(isSame ? '0' : '1');
         }
         catch (err) {
             console.error(err);

@@ -1,7 +1,7 @@
 import {getRequestsFromIssue} from '../getRequestsFromIssue'
 import {Issue} from '../getIssues'
 import {Context} from '../getContext'
-import {issueFixture} from "./fixtures/issue41617"
+import {issueFixture} from './fixtures/issue41617'
 
 const testCtx: Context = {
   label: 'repro',
@@ -12,7 +12,7 @@ const testCtx: Context = {
   workspace: '',
   bisect: undefined,
   issue: undefined,
-  dryRun: false,
+  dryRun: false
 }
 
 const oneCodeBlock = ` comment blah
@@ -81,7 +81,6 @@ test('handles getting a code sample out of comments', async () => {
   expect(input.length).toEqual(2)
 })
 
-
 test('handles the right names', async () => {
   const input = getRequestsFromIssue(testCtx)(issueFixture)
   // 1 in body, 1 in comment
@@ -91,5 +90,7 @@ test('handles the right names', async () => {
   const comment = input[1]
 
   expect(body.description).toEqual("<a href='#issue-747830259'>Issue body</a> code block by @Igorbek")
-  expect(comment.description).toEqual("<a href='https://github.com/microsoft/TypeScript/issues/41617#issuecomment-738957284'>Comment</a> by @weswigham</a>")
+  expect(comment.description).toEqual(
+    "<a href='https://github.com/microsoft/TypeScript/issues/41617#issuecomment-738957284'>Comment</a> by @weswigham</a>"
+  )
 })

@@ -1,7 +1,7 @@
 import {getOctokit} from '@actions/github'
 import {Context} from '../getContext'
-import {diffLines} from "diff"
-import { Issue } from '../getIssues'
+import {diffLines} from 'diff'
+import {Issue} from '../getIssues'
 
 const addComment = `mutation($input: AddCommentInput!) { addComment(input: $input) { clientMutationId } }`
 const editComment = `mutation($input: UpdateIssueCommentInput!) { updateIssueComment(input: $input) { clientMutationId } }`
@@ -13,9 +13,16 @@ export const createAPI = (ctx: Context) => {
   const octokit = getOctokit(ctx.token)
 
   return {
-    editOrCreateComment: async (issueID: string, existingComment: Issue['comments']['nodes'][number] | undefined, body: string) => {
+    editOrCreateComment: async (
+      issueID: string,
+      existingComment: Issue['comments']['nodes'][number] | undefined,
+      body: string
+    ) => {
       // https://regex101.com/r/ZORaaK/1
-      const sanitizedBody = body.replace(/home\/runner\/work\/TypeScript-Twoslash-Repro-Action\/TypeScript-Twoslash-Repro-Action\/dist/g, "[root]")
+      const sanitizedBody = body.replace(
+        /home\/runner\/work\/TypeScript-Twoslash-Repro-Action\/TypeScript-Twoslash-Repro-Action\/dist/g,
+        '[root]'
+      )
       if (existingComment) {
         if (existingComment.body !== sanitizedBody) {
           console.log(diffLines(existingComment.body, sanitizedBody))
@@ -26,7 +33,7 @@ export const createAPI = (ctx: Context) => {
       }
     },
     deleteComment: async (commentId: string) => {
-      return octokit.graphql(deleteComment, { input: { id: commentId } })
+      return octokit.graphql(deleteComment, {input: {id: commentId}})
     }
   }
 }

@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "format": "prettier --write **/*.ts",
+    "format": "prettier --write '**/*.ts'",
     "deploy": "yarn ncc build lib/_main.js --external typescript",
     "setup-tests": "node scripts/downloadTSForTests.js",
     "test": "jest",

@@ -269,11 +269,12 @@ async function gitBisectTypeScript(context, issue) {
     const resultComment = request && (0, getExistingComments_1.getResultCommentInfoForRequest)(issue.comments.nodes, request);
     const bisectRevisions = getRevisionsFromContext(context, request) ||
         getRevisionsFromComment(issue, request, context) ||
-        (resultComment && getRevisionsFromPreviousRun(resultComment, context));
+        (resultComment && getRevisionsFromPreviousRun(resultComment));
     if (!bisectRevisions)
         return;
     const { output, sha } = await (0, gitBisect_1.gitBisect)(context.workspace, bisectRevisions.oldRef, bisectRevisions.newRef, () => {
         const result = buildAndRun(request, context);
+        console.log(result);
         (0, child_process_1.execSync)(`git checkout . && git clean -f`, { cwd: context.workspace });
         return resultsAreEqual(bisectRevisions.oldResult, result);
     });
@@ -303,7 +304,7 @@ function exceptionsAreEqual(a, b) {
         return false;
     return aStack.every((line, i) => line.replace(/\(?[\\/].*$/, '') === bStack[i].replace(/\(?[\\/].*$/, ''));
 }
-function getRevisionsFromPreviousRun(resultComment, context) {
+function getRevisionsFromPreviousRun(resultComment) {
     let newResult;
     let oldResult;
     for (let i = resultComment.info.runs.length - 1; i >= 0; i--) {
@@ -319,9 +320,8 @@ function getRevisionsFromPreviousRun(resultComment, context) {
     if (oldResult && newResult) {
         const oldRef = `v${oldResult.label}`;
         const newRef = newResult.label === 'Nightly' ? resultComment.info.typescriptSha : `v${newResult.label}`;
-        const oldMergeBase = (0, child_process_1.execSync)(`git merge-base ${oldRef} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
         return {
-            oldRef: oldMergeBase,
+            oldRef,
             newRef,
             oldLabel: oldResult.label,
             newLabel: newResult.label,
@@ -342,11 +342,10 @@ function tryGetRevisionsFromText(text, request, context) {
     const match = text.match(bisectCommentRegExp);
     if (match) {
         const [, oldLabel, newLabel] = match;
-        const oldRef = (0, child_process_1.execSync)(`git merge-base ${oldLabel} main`, { cwd: context.workspace, encoding: 'utf8' }).trim();
-        (0, child_process_1.execSync)(`git checkout ${oldRef}`, { cwd: context.workspace });
+        (0, child_process_1.execSync)(`git checkout ${oldLabel}`, { cwd: context.workspace });
         const oldResult = buildAndRun(request, context);
         return {
-            oldRef,
+            oldRef: oldLabel,
             newRef: newLabel,
             oldLabel,
             newLabel,
@@ -757,10 +756,14 @@ exports.gitBisect = void 0;
 const child_process_1 = __nccwpck_require__(2081);
 const http_1 = __nccwpck_require__(3685);
 function gitBisect(cwd, oldRef, newRef, isSameAsOld) {
-    (0, child_process_1.execSync)(`git bisect start ${newRef} ${oldRef} --`, { cwd });
+    (0, child_process_1.execSync)(`git bisect start ${newRef} ${oldRef} -- ./src`, { cwd });
     const server = (0, http_1.createServer)(async (_, res) => {
         try {
-            res.writeHead(200).end(await isSameAsOld() ? '0' : '1');
+            const isSame = await isSameAsOld();
+            const rev = (0, child_process_1.execSync)(`git rev-parse HEAD`, { cwd, encoding: 'utf8' });
+            console.log(`${rev} is ${isSame ? 'good' : 'bad'}`);
+            console.log('');
+            res.writeHead(200).end(isSame ? '0' : '1');
         }
         catch (err) {
             console.error(err);
@@ -769,7 +772,7 @@ function gitBisect(cwd, oldRef, newRef, isSameAsOld) {
     });
     server.listen(3000);
     return new Promise((resolve, reject) => {
-        (0, child_process_1.exec)("git bisect run sh -c 'exit `curl -s http://localhost:3000`'", { encoding: 'utf8', cwd }, (err, stdout, stderr) => {
+        (0, child_process_1.exec)("git bisect run sh -c 'exit `curl -s http://localhost:3000`'", { encoding: 'utf8', cwd }, (err, stdout) => {
             server.close();
             if (err) {
                 return reject(err);

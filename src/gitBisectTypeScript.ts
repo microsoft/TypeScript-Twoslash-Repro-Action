@@ -1,4 +1,5 @@
 import {execSync} from 'child_process'
+import {existsSync} from 'fs'
 import {join} from 'path'
 import {Context} from './getContext'
 import {Issue} from './getIssues'
@@ -131,9 +132,10 @@ function getRevisionsFromContext(context: Context, request: TwoslashRequest): Bi
 }
 
 function buildAndRun(request: TwoslashRequest, context: Context) {
+  let taskRunner = existsSync('Herebyfile.mjs') ? 'hereby' : 'gulp'
   try {
     // Try building without npm install for speed, it will work a fair amount of the time
-    execSync('npx gulp local', {cwd: context.workspace})
+    execSync(`npx ${taskRunner} local`, {cwd: context.workspace})
   } catch {
     try {
       execSync('npm ci || rm -rf node_modules && npm install --no-save --before="`git show -s --format=%ci`"', {
@@ -144,7 +146,7 @@ function buildAndRun(request: TwoslashRequest, context: Context) {
       // Playwright is particularly likely to fail to install, but it doesn't
       // matter. May as well attempt the build and see if it works.
     }
-    execSync('npx gulp local', {cwd: context.workspace, stdio: 'inherit'})
+    execSync(`npx ${taskRunner} local`, {cwd: context.workspace, stdio: 'inherit'})
   }
 
   const tsPath = join(context.workspace, 'built/local/typescript.js')

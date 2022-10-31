@@ -10,7 +10,7 @@ export function gitBisect(
   sha: string
   output: string
 }> {
-  execSync(`git bisect start ${newRef} ${oldRef} -- ./src`, {cwd})
+  execSync(`git bisect start --first-parent ${newRef} ${oldRef} -- ./src`, {cwd})
 
   const server = createServer(async (_, res) => {
     try {

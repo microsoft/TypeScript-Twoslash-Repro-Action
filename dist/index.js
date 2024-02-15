@@ -221,6 +221,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getRequestsFromIssue = void 0;
 const markdownToCodeBlocks_1 = __nccwpck_require__(4434);
 const getRequestsFromIssue = (ctx) => (issue) => {
+    var _a;
     // Body -> CodeBlock
     const requests = [];
     const bodyCodeBlock = (0, markdownToCodeBlocks_1.markdownToCodeBlocks)(issue.body).find(isReproCodeBlock(ctx.tag));
@@ -238,7 +239,7 @@ const getRequestsFromIssue = (ctx) => (issue) => {
                 block,
                 commentID: comment.id,
                 commentUrl: comment.url,
-                description: `<a href='${comment.url}'>Comment</a> by @${comment.author.login}</a>`
+                description: `<a href='${comment.url}'>Comment</a> by @${((_a = comment.author) === null || _a === void 0 ? void 0 : _a.login) || 'ghost'}</a>`
             });
         }
     }
@@ -258,6 +259,7 @@ const isReproCodeBlock = (tag) => (codeBlock) => codeBlock.tags.includes(tag);
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.gitBisectTypeScript = void 0;
 const child_process_1 = __nccwpck_require__(2081);
+const fs_1 = __nccwpck_require__(7147);
 const path_1 = __nccwpck_require__(1017);
 const getRequestsFromIssue_1 = __nccwpck_require__(5969);
 const gitBisect_1 = __nccwpck_require__(5073);
@@ -357,9 +359,10 @@ function getRevisionsFromContext(context, request) {
     return tryGetRevisionsFromText(context.bisect, request, context);
 }
 function buildAndRun(request, context) {
+    let taskRunner = (0, fs_1.existsSync)('Herebyfile.mjs') ? 'hereby' : 'gulp';
     try {
         // Try building without npm install for speed, it will work a fair amount of the time
-        (0, child_process_1.execSync)('npx gulp local', { cwd: context.workspace });
+        (0, child_process_1.execSync)(`npx ${taskRunner} local`, { cwd: context.workspace });
     }
     catch (_a) {
         try {
@@ -372,7 +375,7 @@ function buildAndRun(request, context) {
             // Playwright is particularly likely to fail to install, but it doesn't
             // matter. May as well attempt the build and see if it works.
         }
-        (0, child_process_1.execSync)('npx gulp local', { cwd: context.workspace, stdio: 'inherit' });
+        (0, child_process_1.execSync)(`npx ${taskRunner} local`, { cwd: context.workspace, stdio: 'inherit' });
     }
     const tsPath = (0, path_1.join)(context.workspace, 'built/local/typescript.js');
     delete require.cache[require.resolve(tsPath)];
@@ -647,7 +650,7 @@ const createAPI = (ctx) => {
     return {
         editOrCreateComment: async (issueID, existingComment, body) => {
             // https://regex101.com/r/ZORaaK/1
-            const sanitizedBody = body.replace(/home\/runner\/work\/TypeScript-Twoslash-Repro-Action\/TypeScript-Twoslash-Repro-Action\/dist/g, "[root]");
+            const sanitizedBody = body.replace(/home\/runner\/work\/TypeScript-Twoslash-Repro-Action\/TypeScript-Twoslash-Repro-Action\/dist/g, '[root]');
             if (existingComment) {
                 if (existingComment.body !== sanitizedBody) {
                     console.log((0, diff_1.diffLines)(existingComment.body, sanitizedBody));
@@ -688,9 +691,10 @@ function getBisectCommentInfoForRequest(comments, request) {
 }
 exports.getBisectCommentInfoForRequest = getBisectCommentInfoForRequest;
 function getAllTypeScriptBotComments(comments) {
+    var _a;
     const results = [];
     for (const comment of comments) {
-        if (comment.author.login === "typescript-bot") {
+        if (((_a = comment.author) === null || _a === void 0 ? void 0 : _a.login) === 'typescript-bot') {
             const info = tryParseInfo(comment.body);
             if (info) {
                 results.push({ comment, info });
@@ -701,9 +705,10 @@ function getAllTypeScriptBotComments(comments) {
 }
 exports.getAllTypeScriptBotComments = getAllTypeScriptBotComments;
 function findTypeScriptBotComment(comments, predicate) {
+    var _a;
     for (let i = comments.length - 1; i >= 0; i--) {
         const comment = comments[i];
-        if (comment.author.login === "typescript-bot") {
+        if (((_a = comment.author) === null || _a === void 0 ? void 0 : _a.login) === 'typescript-bot') {
             const info = tryParseInfo(comment.body);
             if (info && predicate(info)) {
                 return { comment, info };
@@ -712,10 +717,10 @@ function findTypeScriptBotComment(comments, predicate) {
     }
 }
 function tryParseInfo(body) {
-    const jsonContentStart = body.indexOf("<!--- TypeScriptBot %%%");
+    const jsonContentStart = body.indexOf('<!--- TypeScriptBot %%%');
     if (jsonContentStart > -1) {
         try {
-            return JSON.parse(body.substring(jsonContentStart + "<!--- TypeScriptBot %%%".length, body.indexOf("%%% --->", jsonContentStart)));
+            return JSON.parse(body.substring(jsonContentStart + '<!--- TypeScriptBot %%%'.length, body.indexOf('%%% --->', jsonContentStart)));
         }
         catch (_a) { }
     }
@@ -738,7 +743,7 @@ const node_fetch_1 = __importDefault(__nccwpck_require__(467));
 const getTypeScriptNightlyVersion = async () => {
     const npmInfo = await (0, node_fetch_1.default)(`https://registry.npmjs.org/typescript`);
     const res = await npmInfo.json();
-    const version = res["dist-tags"].next;
+    const version = res['dist-tags'].next;
     return { version, sha: res.versions[version].gitHead };
 };
 exports.getTypeScriptNightlyVersion = getTypeScriptNightlyVersion;
@@ -756,7 +761,7 @@ exports.gitBisect = void 0;
 const child_process_1 = __nccwpck_require__(2081);
 const http_1 = __nccwpck_require__(3685);
 function gitBisect(cwd, oldRef, newRef, isSameAsOld) {
-    (0, child_process_1.execSync)(`git bisect start ${newRef} ${oldRef} -- ./src`, { cwd });
+    (0, child_process_1.execSync)(`git bisect start --first-parent ${newRef} ${oldRef} -- ./src`, { cwd });
     const server = (0, http_1.createServer)(async (_, res) => {
         try {
             const isSame = await isSameAsOld();

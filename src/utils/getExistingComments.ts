@@ -69,7 +69,7 @@ function findTypeScriptBotComment<T>(
 ): {comment: Issue['comments']['nodes'][number]; info: T} | undefined {
   for (let i = comments.length - 1; i >= 0; i--) {
     const comment = comments[i]
-    if (comment.author.login === 'typescript-bot') {
+    if (comment.author?.login === 'typescript-bot') {
       const info = tryParseInfo(comment.body)
       if (info && predicate(info)) {
         return {comment, info}

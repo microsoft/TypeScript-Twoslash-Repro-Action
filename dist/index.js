@@ -221,6 +221,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getRequestsFromIssue = void 0;
 const markdownToCodeBlocks_1 = __nccwpck_require__(4434);
 const getRequestsFromIssue = (ctx) => (issue) => {
+    var _a;
     // Body -> CodeBlock
     const requests = [];
     const bodyCodeBlock = (0, markdownToCodeBlocks_1.markdownToCodeBlocks)(issue.body).find(isReproCodeBlock(ctx.tag));
@@ -238,7 +239,7 @@ const getRequestsFromIssue = (ctx) => (issue) => {
                 block,
                 commentID: comment.id,
                 commentUrl: comment.url,
-                description: `<a href='${comment.url}'>Comment</a> by @${comment.author.login}</a>`
+                description: `<a href='${comment.url}'>Comment</a> by @${((_a = comment.author) === null || _a === void 0 ? void 0 : _a.login) || 'ghost'}</a>`
             });
         }
     }
@@ -704,9 +705,10 @@ function getAllTypeScriptBotComments(comments) {
 }
 exports.getAllTypeScriptBotComments = getAllTypeScriptBotComments;
 function findTypeScriptBotComment(comments, predicate) {
+    var _a;
     for (let i = comments.length - 1; i >= 0; i--) {
         const comment = comments[i];
-        if (comment.author.login === 'typescript-bot') {
+        if (((_a = comment.author) === null || _a === void 0 ? void 0 : _a.login) === 'typescript-bot') {
             const info = tryParseInfo(comment.body);
             if (info && predicate(info)) {
                 return { comment, info };

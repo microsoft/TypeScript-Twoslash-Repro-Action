@@ -18,9 +18,9 @@ export type Issue = {
       body: string
       id: string
       url: string
-      author: {
+      author?: {
         login: string
-      }
+      } | null
     }[]
   }
 }

@@ -31,7 +31,7 @@ export const getRequestsFromIssue =
           block,
           commentID: comment.id,
           commentUrl: comment.url,
-          description: `<a href='${comment.url}'>Comment</a> by @${comment.author.login}</a>`
+          description: `<a href='${comment.url}'>Comment</a> by @${comment.author?.login || 'ghost'}</a>`
         })
       }
     }

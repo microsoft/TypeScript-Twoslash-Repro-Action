@@ -53,7 +53,7 @@ export function getBisectCommentInfoForRequest(
 export function getAllTypeScriptBotComments(comments: Issue['comments']['nodes']): InfoComment<EmbeddedInfo>[] {
   const results: InfoComment<EmbeddedInfo>[] = []
   for (const comment of comments) {
-    if (comment.author.login === 'typescript-bot') {
+    if (comment.author?.login === 'typescript-bot') {
       const info = tryParseInfo(comment.body)
       if (info) {
         results.push({comment, info})

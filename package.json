@@ -24,7 +24,7 @@
   "author": "Orta",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.2.0",
+    "@actions/core": "^1.9.1",
     "@actions/github": "^4.0.0",
     "@types/diff": "^5.0.1",
     "@typescript/twoslash": "^3.2.1",

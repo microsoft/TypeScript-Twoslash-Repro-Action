@@ -45,7 +45,7 @@ const downloadTSVersion = (version: string) => {
 
 // Grab the versions the playground uses
 const downloadReleases = async () => {
-  const response = await fetch('https://typescript.azureedge.net/indexes/releases.json')
+  const response = await fetch('https://playgroundcdn.typescriptlang.org/indexes/releases.json')
   const releases = await response.json()
   return releases.versions as string[]
 }
